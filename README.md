@@ -1,5 +1,7 @@
 # RepoShelf
 
+![RepoShelf — Remote-first repository workspaces for VS Code](docs/images/reposhelf-banner.png)
+
 **Remote-first repository workspaces for VS Code.**
 
 RepoShelf lets you browse repositories without cloning every project, then

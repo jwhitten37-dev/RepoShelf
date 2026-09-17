@@ -31,8 +31,15 @@ sponsored by GitLab Inc., GitHub, Inc., or Microsoft Corporation.
 - Icons must remain legible in light, dark, and high-contrast VS Code themes.
 - Do not use a provider logo as the RepoShelf primary mark.
 
-The current Activity Bar SVG is a provisional provider-neutral shelf/grid mark.
-Marketplace icon and listing assets remain deferred until visual review.
+The provider-neutral visual identity is integrated through:
+
+- `resources/reposhelf-icon.png`: 256×256 Marketplace and Extensions view icon.
+- `resources/reposhelf-activitybar.svg`: centered, single-color 24×24 Activity
+  Bar icon.
+- `docs/images/reposhelf-banner.png`: 1600×400 README and Marketplace details
+  banner.
+
+Additional listing screenshots remain deferred until release-readiness review.
 
 ## Metadata tracking
 
