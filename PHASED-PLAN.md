@@ -1,0 +1,585 @@
+# RepoShelf VS Code Extension: Phased Implementation Plan
+
+> **Phase 0 clarification:** Confirmed decisions and guardrails are maintained
+> in [`docs/phase-0/`](./docs/phase-0/). They supersede conflicting provisional
+> wording below. Initial development targets a corporate self-managed GitLab,
+> runs independently in native Windows and Remote–WSL extension hosts, and is
+> tested locally. Public source preservation and branding are tracked separately
+> from feature phases. Marketplace packaging, signing, and release remain gated
+> until after team-ready hardening. Runtime behavior must not depend on the
+> source checkout's Git metadata.
+
+Yes—those refinements are coherent, technically feasible, and make the extension’s purpose much clearer: **remote-first GitLab browsing with short-lived, selectively materialized local edit workspaces**.
+
+The two key rules would be:
+
+1. A remote project and any of its branches are always browsable without a local clone.
+2. A local sparse/partial checkout exists only while you actively need normal editing, Git, build, or tooling support—and can be removed after a successful push without touching the remote branch.
+
+GitLab provides an endpoint to list/search a project’s branches and repository APIs to browse files at a specified ref. VS Code extensions can also provide custom, read-only virtual documents or virtual filesystems for remote content.
+
+## Confirmed design decisions
+
+### Branch-aware remote browsing
+
+At the **project** level, the user selects a branch, tag, or commit ref. That selected ref becomes the context for the entire virtual repository tree and every file view.
+
+For example:
+
+```text
+platform
+└── cluster-bootstrap
+    ├── Ref: [ main ▼ ]
+    ├── charts
+    │   └── bootstrap
+    │       └── values.yaml
+    └── README.md
+```
+
+When you select:
+
+```text
+Ref: feature/upgrade-helm
+```
+
+The extension should:
+
+- Fetch or resolve that branch from GitLab.
+- Refresh the repository tree using that ref.
+- Open files at that ref.
+- Preserve the selected branch/ref per project as extension metadata.
+- Clearly display the active ref in the project node and editor UI.
+- Avoid implying that you are viewing `main` when you are really viewing a feature branch.
+
+A remote-file URI should encode enough immutable context to prevent ambiguity:
+
+```text
+reposhelffs://gitlab.company.example/
+  project/842/
+  file/charts/bootstrap/values.yaml
+  ?ref=feature%2Fupgrade-helm
+```
+
+Even better, after resolving the branch, the extension can capture the commit SHA behind it:
+
+```text
+reposhelffs://gitlab.company.example/
+  project/842/
+  file/charts/bootstrap/values.yaml
+  ?ref=feature%2Fupgrade-helm&commit=1a2b3c4d
+```
+
+That matters because branches move. A reader who opened a file at 10:00 AM should not silently see different content at 2:00 PM simply because someone pushed new commits. The editor can either:
+
+- Pin the currently opened document to the resolved commit SHA.
+- Display an “Updated remotely” notification and offer **Refresh to latest branch head**.
+- Explicitly choose a “live branch” mode, with a visible indicator that a refresh may update content.
+
+For the first implementation, pinning open documents to a commit SHA is safest and easiest to reason about.
+
+### Missing-file behavior
+
+If you open:
+
+```text
+main → docs/text.md
+```
+
+and then change the selected ref to:
+
+```text
+feature/restructure-docs
+```
+
+The extension should not assume the file exists there. It should:
+
+1. Resolve whether `docs/text.md` exists at the new ref.
+2. If yes, reopen or refresh the file from the selected ref.
+3. If no, keep the original tab open and show a clear state message such as:
+
+```text
+docs/text.md does not exist in feature/restructure-docs.
+
+[Open the file at main]
+[Browse feature/restructure-docs]
+[Compare refs]
+```
+
+If it was renamed, GitLab’s repository API may not give you a guaranteed simple rename mapping for arbitrary branch differences, so “search the selected branch” is generally more dependable than pretending the extension knows the renamed path.
+
+A useful comparison action can be:
+
+```text
+Compare:
+main ↔ feature/restructure-docs
+```
+
+For textual files, that could open VS Code’s native diff editor with the two remote URIs.
+
+### Remove local branch copy, not remote branch
+
+Your correction is important: after commit and push, “cleanup” means:
+
+```text
+Remove:
+✓ Local checkout/worktree
+✓ Locally downloaded sparse paths and Git metadata
+
+Keep:
+✓ Remote GitLab project
+✓ Remote feature branch
+✓ Pushed commit history
+✓ Remote branch browsability in the extension
+```
+
+The extension can immediately return you to remote browsing of that same branch:
+
+```text
+platform / cluster-bootstrap
+Ref: feature/upgrade-helm
+Status: Remote only
+```
+
+You retain full visibility of your newly pushed branch and can reopen its files read-only at any time. If more edits are needed later, the user materializes it again.
+
+## Phased implementation plan
+
+## Phase 0: Design and guardrails
+
+Before coding, define the project’s behavior, data model, and safety boundary.
+
+### Goals
+
+- Initially support the corporate self-managed GitLab while keeping instance
+  identifiers and architecture suitable for later multi-instance support.
+- Browse remote group/subgroup/project/repository/file hierarchy with no clone.
+- Support ref-aware browsing at branch, tag, and immutable commit SHA.
+- Materialize local copies only within an explicit managed clone root.
+- Never delete remote projects, branches, commits, or GitLab data as part of cleanup.
+- Never silently delete local content.
+
+### Non-goals for the first release
+
+- Replace GitLab’s web UI.
+- Replace VS Code’s built-in Source Control view.
+- Implement a full Git client in TypeScript.
+- Transparently make arbitrary remote files editable without a local Git checkout.
+- Automatically infer a complete dependency set for application builds.
+- Manage merge-request approvals, pipelines, issues, releases, or deployments.
+
+### Core configuration
+
+```json
+{
+  "reposhelf.instances": [
+    {
+      "id": "company-gitlab",
+      "label": "Company GitLab",
+      "baseUrl": "https://gitlab.company.example"
+    }
+  ],
+  "reposhelf.cloneRoot": "C:\\Users\\justin\\source\\gitlab-managed",
+  "reposhelf.defaultCloneMode": "partialSparse",
+  "reposhelf.remoteDocumentMode": "pinnedCommit",
+  "reposhelf.cleanup.confirmAlways": true,
+  "reposhelf.cleanup.blockOnUnpushedCommits": true
+}
+```
+
+### Storage boundary
+
+Use separate stores for separate purposes:
+
+| Data                                                           | Location                     | Reason                             |
+| -------------------------------------------------------------- | ---------------------------- | ---------------------------------- |
+| PAT or OAuth refresh token                                     | VS Code `SecretStorage`      | Avoid plaintext credential storage |
+| Instance URL, clone root, defaults                             | VS Code settings             | User-controlled configuration      |
+| Last selected ref, favorites, recent projects, sparse profiles | Extension global storage     | Small local preference metadata    |
+| Local clone truth/state                                        | Filesystem plus Git commands | Git and disk are authoritative     |
+| Remote project, branch, tree truth                             | GitLab API                   | Server is authoritative            |
+
+### Security requirements
+
+- Validate instance URLs and only send credentials to the configured GitLab host.
+- Never include PATs in clone URLs, workspace metadata, logs, error dialogs, telemetry, or copied commands.
+- Use `read_api`/`read_repository`-style privileges for browse-only operations where organization policy permits; request broader permissions only for explicit actions that need them.
+- Use the OS Git credential helper, SSH agent, or approved enterprise Git authentication workflow for `git clone`, `git fetch`, and `git push`.
+- Use the resolved/canonical filesystem path and enforce that all managed local workspaces live below the configured clone root.
+- Treat symlinks, Windows junctions, reparse points, and paths outside the clone root as deletion blockers.
+
+### Suggested implementation stack
+
+- TypeScript for the VS Code extension host.
+- VS Code Extension API for UI, virtual documents/filesystem, command registration, SecretStorage, storage, output channels, and workspace interaction.
+- Native `git` CLI invoked through Node’s process APIs for cloning and local Git validation.
+- Direct GitLab REST API requests using `fetch` or a small HTTP client abstraction.
+- Vitest or Jest for core unit tests; VS Code extension-host integration tests for user workflows.
+- Optional later: a small Go helper only if you find native-Git process orchestration or cross-platform filesystem behavior too awkward in TypeScript. Start with TypeScript only.
+
+## Phase 1: Instance login and remote catalog
+
+**Outcome:** users can connect to GitLab and browse the actual group/subgroup/project structure without creating clones.
+
+### Deliverables
+
+- Command: `RepoShelf: Add GitLab Instance`.
+- Prompt for base URL.
+- Prompt for PAT, stored in `SecretStorage`.
+- Connection test that shows the authenticated user identity and meaningful errors for:
+  - Invalid base URL.
+  - TLS/certificate failure.
+  - Proxy/network failure.
+  - Expired/invalid token.
+  - Insufficient API scope.
+  - GitLab API version incompatibility.
+- Command: `RepoShelf: Refresh Catalog`.
+- Dedicated Activity Bar container and Explorer tree.
+
+### Tree behavior
+
+```text
+RepoShelf
+├── Company GitLab
+│   ├── Groups
+│   │   ├── platform
+│   │   │   ├── cluster-bootstrap
+│   │   │   └── security
+│   │   │       └── kube-audit-policies
+│   │   └── applications
+│   │       └── billing-api
+│   ├── Personal namespace
+│   ├── Favorites
+│   ├── Recent
+│   └── Locally Materialized
+```
+
+### API behavior
+
+- Retrieve groups the user can access.
+- Retrieve direct projects for expanded groups.
+- Retrieve subgroups on demand.
+- Do not recursively fetch all groups, projects, branches, and files at activation.
+- Cache successful catalog responses with timestamps.
+- Add refresh actions at the instance, group, and project levels.
+- Gracefully handle pagination from the first implementation; large GitLab organizations cannot rely on default page sizes.
+
+### Acceptance criteria
+
+- A user can configure a self-managed GitLab URL and PAT.
+- The extension shows groups and subgroups as actual tree nodes.
+- Projects appear as child nodes of their namespace/group, not as flattened full-path strings.
+- Expanding a group loads only that group’s direct content.
+- No local repository directories are created while browsing.
+
+## Phase 2: Branch-aware remote repository browser
+
+**Outcome:** users can select a branch or other ref and browse its exact remote tree and files without cloning.
+
+### Deliverables
+
+- Project-level ref selector.
+- Default branch selected initially.
+- Branch search/quick-pick rather than eagerly loading all branches.
+- Support for branch refs first; tags and direct commit SHA entry can follow.
+- Repository tree beneath a project node.
+- Lazy directory expansion.
+- Read-only file opening through `reposhelffs:` URIs.
+- File-content cache with size limit and eviction.
+- Visible project/ref/commit context in tab title, breadcrumb, or editor decoration.
+
+### Ref-selection design
+
+At project level:
+
+```text
+cluster-bootstrap
+├── Ref: main ▼
+├── Browse files
+├── Clone options
+└── Project actions
+```
+
+Selecting a ref should create a project browser context:
+
+```text
+projectId: 842
+displayRef: feature/upgrade-helm
+resolvedCommitSha: 1a2b3c4d...
+```
+
+Use **branch name for navigation** but resolve it to a commit SHA before opening a document. The tree can reasonably refresh against the current branch head, while individual documents should default to being pinned to the SHA resolved at open time.
+
+### Missing file flow
+
+If a user switches branches while a document from the prior branch is active:
+
+```text
+README.md
+Ref being viewed: main
+Switch requested: feature/no-readme
+```
+
+The extension should:
+
+- Test whether `README.md` exists at the newly selected ref.
+- Reopen it at the new ref only if it exists.
+- Otherwise retain the old, pinned document and display a non-destructive message.
+- Offer **Browse new ref**, **Keep current document**, and **Compare with another ref**.
+
+Never silently change a document’s content because a branch selection changed.
+
+### Acceptance criteria
+
+- A file opened from `main` is visibly identifiable as `main` or, preferably, its resolved SHA.
+- Selecting another branch refreshes the project tree to that branch.
+- A file absent from the new branch produces a useful state, not a blank editor or generic failure.
+- Opening and browsing remote content creates no managed clone.
+- Remote documents are read-only.
+
+## Phase 3: Controlled local materialization
+
+**Outcome:** a user can promote a remote file or folder into a normal local Git workspace for editing.
+
+### Deliverables
+
+- Commands:
+  - `Edit Locally: This File`
+  - `Edit Locally: This Folder`
+  - `Clone Project: Partial + Sparse`
+  - `Clone Project: Full`
+- Clone-mode picker with user defaults.
+- Branch/ref-aware clone behavior.
+- Configurable managed clone root.
+- Native Git execution with cancellation and progress reporting.
+- Open the resulting local folder/file in VS Code.
+- Persist metadata: project ID, canonical remote URL, branch, clone mode, sparse paths, local path, last opened, local size.
+
+### Recommended clone modes
+
+```text
+Browse remotely
+Edit this file (partial + sparse)
+Edit this folder (partial + sparse)
+Custom sparse selection
+Full clone
+```
+
+For an editable selected file, begin with:
+
+```bash
+git clone \
+  --filter=blob:none \
+  --sparse \
+  --branch feature/my-change \
+  git@gitlab.company.example:platform/cluster-bootstrap.git \
+  C:\Users\developer\source\reposhelf-workspaces\platform\cluster-bootstrap
+```
+
+Then configure the sparse paths:
+
+```bash
+git -C C:\Users\developer\source\reposhelf-workspaces\platform\cluster-bootstrap \
+  sparse-checkout set \
+  charts/bootstrap/values.yaml
+```
+
+Git’s sparse-checkout feature materializes a selected subset of tracked files into the working tree; it can later switch that subset, add paths, or disable sparsity and repopulate the full tree.
+
+### Important branch/ref behavior
+
+- **Branch selected:** clone/check out that branch directly.
+- **Tag selected:** create a new local work branch from the tag, because tags are normally detached and not appropriate as a direct edit target.
+- **Commit SHA selected:** require the user to create/select a target branch before editing.
+- **Protected branch selected:** offer “create branch from this ref” rather than assuming push permission.
+- **Existing local managed checkout for the same project/branch:** reuse it after checking its health and state.
+- **Existing checkout for another branch:** either use a separate managed path or, in a later phase, use `git worktree`.
+
+### Acceptance criteria
+
+- Clicking **Edit Locally** from a remote file opens the exact same file from a local path after materialization.
+- The selected branch/ref is respected.
+- The extension never clones outside the managed clone root.
+- A sparse checkout’s selected file/folder becomes editable in standard VS Code.
+- Clone failures leave a meaningful error and clean up incomplete temporary directories safely.
+
+## Phase 4: Commit, push, and local release
+
+**Outcome:** users can commit/push their work, then discard only their local working copy while retaining the remote branch for browse-only access.
+
+### Deliverables
+
+- Detect current local Git state:
+  - Current branch.
+  - Upstream tracking branch.
+  - Dirty/staged/untracked state.
+  - Ahead/behind state.
+  - Ongoing Git operation.
+- Use VS Code’s normal Git SCM UI whenever possible for staging, commit, diff, and push.
+- Add extension commands:
+  - `RepoShelf: Push and Release Local Workspace`
+  - `RepoShelf: Release Local Workspace`
+  - `RepoShelf: Check Workspace Safety`
+- After successful push, return users to remote browsing of the same branch.
+- Update extension metadata with last branch, last pushed commit, and last access time.
+
+### “Push and release” sequence
+
+```text
+1. Verify there are no unsaved editor buffers.
+2. Verify Git repository health.
+3. Confirm branch and upstream.
+4. Commit through VS Code SCM or confirm there is already a commit.
+5. Push branch successfully.
+6. Verify local HEAD is no longer ahead of upstream.
+7. Close/remove workspace folder from VS Code as needed.
+8. Remove the local managed clone directory.
+9. Refresh GitLab branch metadata.
+10. Reopen remote browsing at:
+    project = platform/cluster-bootstrap
+    ref = feature/upgrade-helm
+```
+
+The remote branch remains intact. The next time the user clicks that branch in the remote explorer, it appears as any other browseable ref. If further changes are needed, the user materializes it again.
+
+### Cleanup rules
+
+Cleanup must be blocked by default if:
+
+- The repository has staged, unstaged, or untracked changes.
+- `HEAD` is ahead of its upstream branch.
+- There is no tracked upstream branch.
+- A merge, rebase, cherry-pick, revert, or bisect is underway.
+- The local path cannot be proven to be under the configured managed root.
+- Canonical path resolution indicates a symlink/junction/reparse-point risk.
+- VS Code has unsaved documents associated with the workspace.
+- The user requested a normal release but the push failed or has not occurred.
+
+The primary removal mechanism can simply delete the entire managed checkout after safety validation. If using Git worktrees later, `git worktree remove` is useful because it refuses to remove a worktree with uncommitted changes unless forced.
+
+### Acceptance criteria
+
+- After a successful push, **Push and Release** removes the local workspace but does not delete or alter the remote branch.
+- The project and pushed branch remain visible in the remote explorer.
+- A user can open the same branch read-only immediately after release.
+- The extension never force-removes a dirty or unpushed workspace.
+- Cleanup logs explain precisely why a release action was blocked.
+
+## Phase 5: Disk management and quality-of-life features
+
+**Outcome:** the extension becomes useful as a VDI disk-pressure tool rather than only a GitLab browser.
+
+### Deliverables
+
+- **Locally Materialized** virtual view.
+- Per-workspace disk usage:
+  - Working tree.
+  - `.git` directory.
+  - Total.
+- Sort/filter by size, last opened, branch, clone mode, and project group.
+- Disk quota display and configurable warning thresholds.
+- Inactive workspace recommendations:
+  - “Unused for 30 days.”
+  - “Uses more than 2 GB.”
+  - “Clean and fully pushed; safe to release.”
+- Favorites and recent remote projects.
+- Search across groups/projects.
+- Saved sparse profiles per project, for example:
+  - `helm-only`
+  - `ci-config`
+  - `service-api`
+  - `docs`
+- Command to expand sparse checkout paths:
+  - `Add folder to local workspace`
+  - `Switch sparse profile`
+- Safe manual cleanup of stale incomplete clone directories.
+
+### Useful dashboard model
+
+```text
+Locally Materialized
+├── 4.6 GB  applications/billing-api
+│           main · Full clone · Last used 22 days ago
+│           [Open] [Release local workspace]
+├── 142 MB  platform/cluster-bootstrap
+│           feature/upgrade-helm · Sparse · Last used today
+│           [Open] [Push and release]
+└── 36 MB   security/kube-audit-policies
+            main · Sparse · Clean and pushed
+            [Release local workspace]
+```
+
+The extension should **recommend** cleanup based on state and disk size, but should not silently delete workspaces based solely on age.
+
+## Phase 6: Team-ready hardening
+
+**Outcome:** hardened for local validation against the corporate environment.
+
+### Deliverables
+
+- OAuth authorization-code flow as an alternative to PATs, if GitLab admins approve an OAuth application.
+- Multi-instance support, such as corporate GitLab plus GitLab.com.
+- Corporate CA/proxy support through documented and approved configuration paths.
+- Configurable API timeouts, retries, exponential backoff, and rate-limit handling.
+- Optional offline source behavior only if a persistent-cache security design
+  is approved; otherwise retain memory-only source content and document that
+  offline source browsing is unavailable.
+- Respect GitLab authorization and protected-branch rules.
+- Optional merge-request integration:
+  - Create MR after push.
+  - Open current branch’s MR in a browser.
+  - Show basic MR status in project metadata.
+- Local Extension Development Host and installation testing; organizational
+  publishing and distribution processes are deferred outside this plan.
+- Telemetry disabled by default for internal deployments, or explicitly aligned with organizational policy.
+- Threat-model review focused on PAT handling, local path deletion, logs, and remote-content rendering.
+
+## Preservation checkpoint: RepoShelf public-source transition
+
+**Status:** in progress; Phase 4 is intentionally paused.
+
+- Phase 3 implementation and manual validation are complete.
+- Product identity is **RepoShelf**: _Remote-first repository workspaces for VS
+  Code._
+- The clean-break rename changes commands, settings, URI scheme, storage keys,
+  package identity, default workspace root, and private marker paths. Pre-rename
+  local state and materializations are not migrated or deleted.
+- Public-source preparation includes an Apache-2.0 license, contributor and
+  security guidance, automated checks, secret scanning, and GitHub publication.
+- Corporate test identifiers and ownership-marker contents are not retained.
+- Phase 4 does not begin as part of this checkpoint.
+
+## Phase 7: Marketplace release readiness
+
+**Outcome:** a reviewed, reproducible, provider-neutral VS Code Marketplace
+release after team-ready hardening.
+
+### Deliverables
+
+- Confirm the `chiefwizard` Marketplace publisher and extension identity
+  `chiefwizard.reposhelf`.
+- Finalize provider-neutral icon, listing graphics, screenshots, categories,
+  keywords, and accessibility text using the approved RepoShelf palette.
+- Document privacy behavior, telemetry posture, token storage, network access,
+  managed-workspace ownership, and deletion safeguards in listing-ready form.
+- Produce a reproducible VSIX, inspect its complete contents, install it into a
+  clean Extension Development Host, and repeat native Windows and Remote–WSL
+  release gates.
+- Define release signing/provenance, changelog, versioning, rollback, and
+  publisher-account security procedures.
+- Publish only after security review, dependency audit, license review, and all
+  manual gates pass without retaining private environment data.
+
+## Build order
+
+If you are implementing this yourself, the highest-value sequence is:
+
+1. GitLab connection and project/group catalog.
+2. Branch picker and read-only remote file viewer.
+3. Hierarchical virtual repository tree with lazy loading.
+4. Partial+sparse local materialization from a remote file/folder.
+5. Safe push-and-release local workspace flow.
+6. Disk-management dashboard and saved sparse profiles.
+7. OAuth, merge requests, multi-instance support, and team-ready hardening.
+8. Marketplace release readiness.
+
+That order proves the central value early: **browse any GitLab project and branch without consuming clone space**. It then adds the more complex local Git lifecycle only after the remote viewer, data model, auth, and group/project hierarchy are stable.

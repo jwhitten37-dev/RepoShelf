@@ -1,0 +1,238 @@
+{
+  "name": "reposhelf",
+  "displayName": "RepoShelf",
+  "description": "Remote-first repository workspaces for VS Code.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "chiefwizard",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/jwhitten37-dev/RepoShelf#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jwhitten37-dev/RepoShelf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jwhitten37-dev/RepoShelf/issues"
+  },
+  "engines": {
+    "vscode": "^1.137.0",
+    "node": ">=24 <25"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "categories": [
+    "Source Control",
+    "Other"
+  ],
+  "keywords": [
+    "gitlab",
+    "remote repositories",
+    "sparse checkout",
+    "partial clone",
+    "workspace management"
+  ],
+  "activationEvents": [
+    "onFileSystem:reposhelffs",
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "reposhelf.addInstance",
+        "title": "Add GitLab Instance",
+        "category": "RepoShelf",
+        "icon": "$(add)"
+      },
+      {
+        "command": "reposhelf.testConnection",
+        "title": "Test GitLab Connection",
+        "category": "RepoShelf",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "reposhelf.refreshCatalog",
+        "title": "Refresh Catalog",
+        "category": "RepoShelf",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "reposhelf.selectBranch",
+        "title": "Select Branch",
+        "category": "RepoShelf",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "reposhelf.openRemoteFile",
+        "title": "Open Remote File",
+        "category": "RepoShelf"
+      },
+      {
+        "command": "reposhelf.editLocally",
+        "title": "Edit Locally",
+        "category": "RepoShelf",
+        "icon": "$(cloud-download)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "reposhelf",
+          "title": "RepoShelf",
+          "icon": "resources/reposhelf.svg"
+        }
+      ]
+    },
+    "views": {
+      "reposhelf": [
+        {
+          "id": "reposhelf.catalog",
+          "name": "Remote Catalog"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "reposhelf.catalog",
+        "contents": "Connect to your corporate GitLab without creating a local clone.\n[Add GitLab Instance](command:reposhelf.addInstance)",
+        "when": "reposhelf.hasInstance == false"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "reposhelf.addInstance",
+          "when": "view == reposhelf.catalog && reposhelf.hasInstance == false",
+          "group": "navigation@1"
+        },
+        {
+          "command": "reposhelf.testConnection",
+          "when": "view == reposhelf.catalog && reposhelf.hasInstance == true",
+          "group": "navigation@2"
+        },
+        {
+          "command": "reposhelf.refreshCatalog",
+          "when": "view == reposhelf.catalog && reposhelf.hasInstance == true",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "reposhelf.refreshCatalog",
+          "when": "view == reposhelf.catalog && (viewItem == instance || viewItem == group)",
+          "group": "inline@1"
+        },
+        {
+          "command": "reposhelf.selectBranch",
+          "when": "view == reposhelf.catalog && viewItem == project",
+          "group": "inline@2"
+        },
+        {
+          "command": "reposhelf.editLocally",
+          "when": "view == reposhelf.catalog && (viewItem == project || viewItem == remoteFolder || viewItem == remoteFile)",
+          "group": "inline@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "RepoShelf",
+      "properties": {
+        "reposhelf.instances": {
+          "type": "array",
+          "default": [],
+          "scope": "machine-overridable",
+          "description": "Configured GitLab instances. Phases 1–5 support one enabled instance.",
+          "items": {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "instanceId",
+              "label",
+              "baseUrl",
+              "enabled"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "reposhelf.cloneRoot": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "scope": "machine-overridable",
+          "description": "Host-local root for extension-managed Git checkouts. Defaults to ~/reposhelf-workspaces."
+        },
+        "reposhelf.api.timeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 1000,
+          "maximum": 120000,
+          "scope": "machine-overridable",
+          "description": "Timeout in milliseconds for each GitLab API request."
+        },
+        "reposhelf.cache.maxFileBytes": {
+          "type": "number",
+          "default": 5242880,
+          "minimum": 65536,
+          "maximum": 20971520,
+          "scope": "machine-overridable",
+          "description": "Maximum remote file size retained in the in-memory cache."
+        },
+        "reposhelf.cache.maxTotalBytes": {
+          "type": "number",
+          "default": 52428800,
+          "minimum": 1048576,
+          "maximum": 209715200,
+          "scope": "machine-overridable",
+          "description": "Maximum total size of the in-memory remote file cache."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run check && node scripts/build.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
+    "compile": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.10.1",
+    "@types/vscode": "1.137.0",
+    "@vitest/coverage-v8": "5.0.1",
+    "eslint": "10.10.0",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
+  }
+}

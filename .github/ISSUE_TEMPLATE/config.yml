@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/jwhitten37-dev/RepoShelf/security/advisories/new
+    about: Do not disclose vulnerabilities in public issues.
+  - name: Support guidance
+    url: https://github.com/jwhitten37-dev/RepoShelf/blob/main/SUPPORT.md
+    about: Review support and safe-reporting guidance before filing an issue.

@@ -1,0 +1,17 @@
+.vscode/**
+.github/**
+coverage/**
+docs/**
+node_modules/**
+scripts/**
+src/**
+test/**
+*.toml
+*.md
+.editorconfig
+.gitattributes
+.gitignore
+.prettierignore
+eslint.config.mjs
+package-lock.json
+tsconfig.json

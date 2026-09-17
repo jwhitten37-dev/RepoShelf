@@ -1,0 +1,51 @@
+export type GitLabErrorCode =
+  | "cancelled"
+  | "configuration"
+  | "authentication"
+  | "authorization"
+  | "notFound"
+  | "rateLimited"
+  | "tls"
+  | "network"
+  | "timeout"
+  | "server"
+  | "invalidResponse";
+
+export class GitLabError extends Error {
+  public constructor(
+    public readonly code: GitLabErrorCode,
+    message: string,
+    options?: { cause?: unknown; status?: number },
+  ) {
+    super(message, { cause: options?.cause });
+    this.name = "GitLabError";
+    this.status = options?.status;
+  }
+
+  public readonly status: number | undefined;
+}
+
+export function toUserMessage(error: unknown): string {
+  if (!(error instanceof GitLabError)) {
+    return "An unexpected RepoShelf error occurred. See the output channel for details.";
+  }
+
+  const messages: Record<GitLabErrorCode, string> = {
+    cancelled: "The GitLab request was cancelled.",
+    configuration: error.message,
+    authentication:
+      "GitLab rejected the token. Verify that it is current and try again.",
+    authorization:
+      "The token is valid but does not have permission for this operation.",
+    notFound: "The requested GitLab resource was not found.",
+    rateLimited: "GitLab rate-limited the request. Wait and try again.",
+    tls: "The secure connection to GitLab failed. Check the corporate CA and proxy configuration.",
+    network:
+      "GitLab could not be reached. Check the URL, network, and proxy configuration.",
+    timeout:
+      "The GitLab request timed out. Check the network or increase the API timeout setting.",
+    server: "GitLab returned a server error. Try again later.",
+    invalidResponse: "GitLab returned an incompatible or invalid API response.",
+  };
+  return messages[error.code];
+}

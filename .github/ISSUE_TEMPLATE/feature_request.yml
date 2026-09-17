@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a scoped RepoShelf improvement
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should RepoShelf solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe behavior, safety implications, and alternatives.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Remote browsing
+        - Local materialization
+        - Workspace lifecycle
+        - GitLab provider
+        - New provider
+        - Security or privacy
+        - Documentation or developer experience
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-data confirmation
+      options:
+        - label: This proposal contains no private environment data.
+          required: true
