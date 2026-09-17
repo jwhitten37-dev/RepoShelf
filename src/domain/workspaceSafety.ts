@@ -7,6 +7,7 @@ export type WorkspaceSafetyBlockerCode =
   | "originMismatch"
   | "remoteTargetMissing"
   | "headNotRemote"
+  | "postPushMismatch"
   | "localOnlyRefs"
   | "snapshotIncomplete";
 
@@ -29,6 +30,7 @@ export interface GitSafetySnapshot {
   readonly headAheadOfRemoteTarget: number | undefined;
   readonly localRefCount: number;
   readonly localOnlyRefCount: number;
+  readonly unrelatedLocalOnlyRefCount: number;
   readonly sparseCheckout: boolean;
 }
 
@@ -48,6 +50,50 @@ export interface WorkspaceSafetyBlocker {
 export interface WorkspaceSafetyDecision {
   readonly safe: boolean;
   readonly blockers: readonly WorkspaceSafetyBlocker[];
+}
+
+export function decidePushReadiness(
+  evidence: WorkspaceSafetyEvidence,
+): WorkspaceSafetyDecision {
+  const releaseDecision = decideWorkspaceSafety(evidence);
+  const pushAllowedCodes = new Set<WorkspaceSafetyBlockerCode>([
+    "remoteTargetMissing",
+    "headNotRemote",
+  ]);
+  const blockers = releaseDecision.blockers.filter(
+    ({ code }) =>
+      !pushAllowedCodes.has(code) &&
+      !(
+        code === "localOnlyRefs" &&
+        evidence.snapshot?.unrelatedLocalOnlyRefCount === 0
+      ),
+  );
+  return { safe: blockers.length === 0, blockers };
+}
+
+export function decidePostPushSafety(
+  evidence: WorkspaceSafetyEvidence,
+): WorkspaceSafetyDecision {
+  const decision = decideWorkspaceSafety(evidence);
+  const snapshot = evidence.snapshot;
+  if (
+    snapshot !== undefined &&
+    snapshot.remoteTargetSha !== undefined &&
+    snapshot.remoteTargetSha !== snapshot.headSha
+  ) {
+    return {
+      safe: false,
+      blockers: [
+        ...decision.blockers,
+        {
+          code: "postPushMismatch",
+          message:
+            "The refreshed remote target does not exactly match local HEAD after push.",
+        },
+      ],
+    };
+  }
+  return decision;
 }
 
 export function decideWorkspaceSafety(

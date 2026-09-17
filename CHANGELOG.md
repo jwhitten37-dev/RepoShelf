@@ -15,6 +15,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Read-only managed-workspace safety assessment with fail-closed ownership,
   containment, Git state, remote reachability, local-only-ref, and unsaved-buffer
   checks.
+- Explicit Push and Release and Release Local Workspace commands with post-push
+  verification, confirmation, short-lived deletion capabilities, and registry
+  recovery behavior.
 
 ### Changed
 
@@ -24,8 +27,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Security
 
 - Added publication ignores and a pre-publication sensitive-value audit.
-- Added guarded ownership and path validation before collecting release-safety
-  evidence; no push or deletion capability is introduced.
+- Added guarded ownership/path validation, exact remote-result verification,
+  immediate pre-delete revalidation, no-follow removal, and fail-closed partial
+  failure handling.
 
 ## [0.1.0] - Unreleased
 

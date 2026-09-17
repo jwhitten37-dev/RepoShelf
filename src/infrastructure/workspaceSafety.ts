@@ -32,21 +32,24 @@ export class WorkspaceSafetyCollector {
   public async collect(
     record: ManagedWorkspaceRecord,
     signal?: AbortSignal,
+    refreshRemote = true,
   ): Promise<GitSafetySnapshot> {
     const checkout = await this.validateOwnership(record);
     const options = signal === undefined ? {} : { signal };
-    await this.git.run(
-      [
-        "-C",
-        checkout,
-        "fetch",
-        "--prune",
-        "--no-tags",
-        "origin",
-        "+refs/heads/*:refs/remotes/origin/*",
-      ],
-      options,
-    );
+    if (refreshRemote) {
+      await this.git.run(
+        [
+          "-C",
+          checkout,
+          "fetch",
+          "--prune",
+          "--no-tags",
+          "origin",
+          "+refs/heads/*:refs/remotes/origin/*",
+        ],
+        options,
+      );
+    }
     const [
       top,
       gitDirectory,
@@ -119,7 +122,7 @@ export class WorkspaceSafetyCollector {
     const localRefs = parseNulList(refs).filter(
       (ref) => !ref.startsWith("refs/remotes/"),
     );
-    const localOnly = await Promise.all(
+    const localOnlyCounts = await Promise.all(
       localRefs.map(async (ref) =>
         parseCount(
           await this.required(
@@ -173,7 +176,11 @@ export class WorkspaceSafetyCollector {
       remoteTargetSha: remoteTargetSha?.toLowerCase(),
       headAheadOfRemoteTarget,
       localRefCount: localRefs.length,
-      localOnlyRefCount: localOnly.filter((count) => count > 0).length,
+      localOnlyRefCount: localOnlyCounts.filter((count) => count > 0).length,
+      unrelatedLocalOnlyRefCount: localOnlyCounts.filter(
+        (count, index) =>
+          count > 0 && localRefs[index] !== `refs/heads/${record.targetBranch}`,
+      ).length,
       sparseCheckout,
     };
   }

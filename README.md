@@ -10,8 +10,8 @@ editing and Git tooling are needed. GitLab is the first implemented provider;
 the product identity and architecture remain provider-neutral.
 
 > [!IMPORTANT]
-> RepoShelf is pre-release software. Phase 4 safety-foundation work is in
-> progress, but extension-managed push/release or deletion is not implemented.
+> RepoShelf is pre-release software. Phase 4 implementation is complete, with
+> native Windows destructive-path validation still required as a release gate.
 > Closing a window never authorizes workspace deletion.
 
 ## Current capabilities
@@ -27,6 +27,8 @@ the product identity and architecture remain provider-neutral.
 - Run a read-only, fail-closed managed-workspace safety assessment covering
   ownership, containment, dirty/unsaved state, Git operations, remote
   reachability, and local-only refs.
+- Push committed work to an explicit managed branch, verify the remote result,
+  and release only the proven local checkout after explicit confirmation.
 - Keep remote file content in a bounded memory-only cache.
 
 See [PHASED-PLAN.md](./PHASED-PLAN.md) for scope and sequencing. Design and
@@ -42,9 +44,9 @@ implementation records for [Phase 1](./docs/phase-1/README.md),
   URLs or process arguments.
 - Native Git authentication is delegated to the host's HTTPS credential helper.
 - Remote source bodies are not persistently cached by RepoShelf.
-- Managed workspace cleanup remains deliberately unavailable while Phase 4's
-  guarded push, remote verification, and deletion slices are implemented and
-  validated.
+- Managed workspace release is fail-closed and never deletes remote data. Native
+  Windows junction/reparse and open-handle validation remains mandatory before a
+  production release.
 
 Never include credentials, private repository content, internal URLs, project
 identifiers, usernames, or ownership-marker data in public issues or logs. See

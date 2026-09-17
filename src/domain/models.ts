@@ -77,6 +77,8 @@ export interface ManagedWorkspaceRecord {
   readonly revealPath: string | undefined;
   readonly createdAt: string;
   readonly lastOpenedAt: string;
+  readonly lastVerifiedAt?: string;
+  readonly lastPushedCommitSha?: string;
 }
 
 export interface CatalogClient {

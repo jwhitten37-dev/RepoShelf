@@ -1,9 +1,9 @@
-import path from "node:path";
 import * as vscode from "vscode";
 import { GitLabError } from "../domain/errors.js";
 import { decideWorkspaceSafety } from "../domain/workspaceSafety.js";
 import type { Logger } from "../infrastructure/logger.js";
 import type { WorkspaceSafetyCollector } from "../infrastructure/workspaceSafety.js";
+import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
 import type { VsCodeWorkspaceRegistry } from "./workspaceRegistry.js";
 
 export class WorkspaceSafetyCommand {
@@ -45,7 +45,7 @@ export class WorkspaceSafetyCommand {
       );
       const decision = decideWorkspaceSafety({
         ownershipValid: true,
-        unsavedEditorCount: countUnsavedBuffers(record.localPath),
+        unsavedEditorCount: countUnsavedWorkspaceBuffers(record.localPath),
         expectedBranch: record.targetBranch,
         expectedOriginUrl: record.canonicalRepositoryUrl,
         snapshot,
@@ -88,32 +88,6 @@ export class WorkspaceSafetyCommand {
       this.logger.info(`Safety blocker ${blocker.code}: ${blocker.message}`);
     }
   }
-}
-
-function countUnsavedBuffers(workspacePath: string): number {
-  const resources = new Set<string>();
-  for (const document of vscode.workspace.textDocuments) {
-    if (document.isDirty && isWithinWorkspace(document.uri, workspacePath)) {
-      resources.add(document.uri.toString());
-    }
-  }
-  for (const notebook of vscode.workspace.notebookDocuments) {
-    if (notebook.isDirty && isWithinWorkspace(notebook.uri, workspacePath)) {
-      resources.add(notebook.uri.toString());
-    }
-  }
-  return resources.size;
-}
-
-function isWithinWorkspace(uri: vscode.Uri, workspacePath: string): boolean {
-  if (uri.scheme !== "file") return false;
-  const relative = path.relative(workspacePath, uri.fsPath);
-  return (
-    relative === "" ||
-    (!relative.startsWith(`..${path.sep}`) &&
-      relative !== ".." &&
-      !path.isAbsolute(relative))
-  );
 }
 
 function cancellationToAbortController(

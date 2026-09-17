@@ -84,6 +84,18 @@
         "title": "Check Workspace Safety",
         "category": "RepoShelf",
         "icon": "$(shield)"
+      },
+      {
+        "command": "reposhelf.releaseWorkspace",
+        "title": "Release Local Workspace",
+        "category": "RepoShelf",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "reposhelf.pushAndReleaseWorkspace",
+        "title": "Push and Release Local Workspace",
+        "category": "RepoShelf",
+        "icon": "$(cloud-upload)"
       }
     ],
     "viewsContainers": {
@@ -111,6 +123,16 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "reposhelf.releaseWorkspace",
+          "when": "workspaceFolderCount == 1"
+        },
+        {
+          "command": "reposhelf.pushAndReleaseWorkspace",
+          "when": "workspaceFolderCount == 1"
+        }
+      ],
       "view/title": [
         {
           "command": "reposhelf.addInstance",

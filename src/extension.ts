@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { NativeGitRunner } from "./infrastructure/gitRunner.js";
 import { MaterializationService } from "./infrastructure/materialization.js";
+import { WorkspaceReleaseService } from "./infrastructure/workspaceRelease.js";
 import { WorkspaceSafetyCollector } from "./infrastructure/workspaceSafety.js";
 import { OutputChannelLogger } from "./infrastructure/logger.js";
 import { VsCodeTokenStore } from "./infrastructure/secretStore.js";
@@ -21,6 +22,7 @@ import {
 import { revealManagedSelection } from "./vscode/workspaceReveal.js";
 import { VsCodeWorkspaceRegistry } from "./vscode/workspaceRegistry.js";
 import { WorkspaceSafetyCommand } from "./vscode/workspaceSafetyCommand.js";
+import { WorkspaceReleaseCommand } from "./vscode/workspaceReleaseCommand.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -42,6 +44,17 @@ export async function activate(
     logger,
   );
   const catalog = new CatalogTreeProvider(instances, clients, refs, logger);
+  const workspaceRelease = new WorkspaceReleaseCommand(
+    workspaceRegistry,
+    new WorkspaceReleaseService(
+      git,
+      new WorkspaceSafetyCollector(git),
+      workspaceRegistry,
+    ),
+    refs,
+    catalog,
+    logger,
+  );
   const remoteFiles = new RemoteFileSystemProvider(
     instances,
     clients,
@@ -95,6 +108,12 @@ export async function activate(
     ),
     vscode.commands.registerCommand("reposhelf.checkWorkspaceSafety", () =>
       workspaceSafety.check(),
+    ),
+    vscode.commands.registerCommand("reposhelf.releaseWorkspace", () =>
+      workspaceRelease.release(),
+    ),
+    vscode.commands.registerCommand("reposhelf.pushAndReleaseWorkspace", () =>
+      workspaceRelease.pushAndRelease(),
     ),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("reposhelf.instances")) {

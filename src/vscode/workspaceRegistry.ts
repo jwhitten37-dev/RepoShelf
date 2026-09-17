@@ -25,6 +25,13 @@ export class VsCodeWorkspaceRegistry implements WorkspaceRegistry {
     return this.read();
   }
 
+  public async remove(workspaceId: string): Promise<void> {
+    await this.state.update(
+      STORAGE_KEY,
+      this.read().filter((record) => record.workspaceId !== workspaceId),
+    );
+  }
+
   private read(): ManagedWorkspaceRecord[] {
     const value = this.state.get<unknown>(STORAGE_KEY, []);
     if (!Array.isArray(value)) return [];
@@ -52,7 +59,11 @@ function isManagedWorkspaceRecord(
     typeof value.cloneRoot === "string" &&
     (typeof value.revealPath === "string" || value.revealPath === undefined) &&
     typeof value.createdAt === "string" &&
-    typeof value.lastOpenedAt === "string"
+    typeof value.lastOpenedAt === "string" &&
+    (typeof value.lastVerifiedAt === "string" ||
+      value.lastVerifiedAt === undefined) &&
+    (typeof value.lastPushedCommitSha === "string" ||
+      value.lastPushedCommitSha === undefined)
   );
 }
 

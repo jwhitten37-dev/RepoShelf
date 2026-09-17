@@ -404,6 +404,9 @@ Git’s sparse-checkout feature materializes a selected subset of tracked files 
 
 ## Phase 4: Commit, push, and local release
 
+**Status:** implementation complete; automated WSL validation passes. Native
+Windows destructive-path validation remains a release gate.
+
 **Outcome:** users can commit/push their work, then discard only their local working copy while retaining the remote branch for browse-only access.
 
 ### Deliverables
@@ -420,7 +423,8 @@ Git’s sparse-checkout feature materializes a selected subset of tracked files 
   - `RepoShelf: Release Local Workspace`
   - `RepoShelf: Check Workspace Safety`
 - After successful push, return users to remote browsing of the same branch.
-- Update extension metadata with last branch, last pushed commit, and last access time.
+- Persist the selected remote branch before release. Record last verification and
+  pushed commit metadata while a workspace record remains available.
 
 ### “Push and release” sequence
 
@@ -447,7 +451,8 @@ Cleanup must be blocked by default if:
 
 - The repository has staged, unstaged, or untracked changes.
 - `HEAD` is ahead of its upstream branch.
-- There is no tracked upstream branch.
+- There is no tracked upstream branch and fresh intended-remote reachability plus
+  no-local-only-ref proof cannot be established.
 - A merge, rebase, cherry-pick, revert, or bisect is underway.
 - The local path cannot be proven to be under the configured managed root.
 - Canonical path resolution indicates a symlink/junction/reparse-point risk.
@@ -535,7 +540,8 @@ The extension should **recommend** cleanup based on state and disk size, but sho
 
 ## Preservation checkpoint: RepoShelf public-source transition
 
-**Status:** transition complete; Phase 4 safety-foundation work is in progress.
+**Status:** transition complete; Phase 4 implementation is complete with native
+Windows destructive-path validation retained as a release gate.
 
 - Phase 3 implementation and manual validation are complete.
 - Product identity is **RepoShelf**: _Remote-first repository workspaces for VS
