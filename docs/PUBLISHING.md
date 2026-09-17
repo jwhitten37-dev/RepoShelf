@@ -1,0 +1,87 @@
+# Marketplace Publishing
+
+RepoShelf's Visual Studio Marketplace identity is `chiefwizard.reposhelf`. The
+source repository remains `jwhitten37-dev/RepoShelf`; the Marketplace publisher
+and GitHub owner are independent identities.
+
+## Authentication
+
+Publishing uses Microsoft Entra ID workload identity federation and a
+user-assigned managed identity. No Marketplace Personal Access Token is stored
+in the repository or pipeline.
+
+The Azure DevOps project provides an Azure Resource Manager service connection
+named `Azure`. Its federated managed identity must be a member of the
+`chiefwizard` Marketplace publisher with the **Contributor** role. The pipeline
+uses that service connection through `AzureCLI@2` and publishes with:
+
+```text
+vsce publish --packagePath <validated-vsix> --azure-credential
+```
+
+Never add a PAT, client secret, certificate, federated token, service-connection
+identifier, tenant identifier, subscription identifier, or managed-identity
+resource ID to this repository.
+
+## Pipeline behavior
+
+`azure-pipelines.yml` separates validation from publication:
+
+1. Every `main` update, pull request, and `v*` tag installs the locked dependency
+   graph with Node.js 24.21.0.
+2. Formatting, linting, type checking, all tests, compilation, and a high-severity
+   dependency audit must pass.
+3. The pinned local `@vscode/vsce` packages one VSIX.
+4. The VSIX file list and packaged `chiefwizard.reposhelf` identity are checked
+   against an explicit allowlist.
+5. The validated VSIX is retained as an Azure Pipeline artifact.
+6. Only a `v*` tag can enter the publishing stage. The tag must exactly equal
+   `v<package.json version>` and identify a commit contained in `origin/main`.
+7. The publishing stage downloads and publishes that exact VSIX without
+   rebuilding it.
+
+Ordinary `main` and pull-request builds never publish.
+
+The pipeline currently packages and publishes with `--pre-release` because
+RepoShelf is pre-release software. Removing that flag requires an explicit
+release-readiness review and documentation update; a version tag alone does not
+authorize a stable Marketplace release.
+
+## Required Azure DevOps controls
+
+Before enabling a release, create or verify the `reposhelf-marketplace`
+environment and configure an **Approval** check in Azure DevOps. Limit approval
+authority to trusted maintainers. Also restrict use of the `Azure` service
+connection to the publishing pipeline rather than granting it to every pipeline.
+
+Environment approvals and service-connection permissions are Azure DevOps
+configuration and cannot be enforced solely by repository YAML. A missing or
+unauthorized environment/service connection must fail the publishing stage
+closed.
+
+Restrict creation of `v*` tags to trusted maintainers. The pipeline confirms that
+the tagged commit is contained in `origin/main`, but repository permissions are
+the primary control over who can initiate a release.
+
+## Release procedure
+
+Marketplace publication remains gated until the release-readiness phase. When a
+reviewed release is approved:
+
+1. Update `package.json` and `package-lock.json` to the intended semantic version.
+2. Move the corresponding changelog entries from **Unreleased** to a dated
+   release section.
+3. Run `npm ci`, `npm run check`, `npm run compile`, and
+   `npm audit --audit-level=high` locally.
+4. Merge the reviewed release commit into `main` and confirm normal CI succeeds.
+5. Create and push an annotated tag matching the manifest exactly, for example
+   `v0.1.0` for version `0.1.0`.
+6. Review the Azure Pipeline's validation results and retained VSIX.
+7. Approve the `reposhelf-marketplace` deployment only after confirming the
+   extension ID, version, commit, package contents, and release notes.
+8. Verify the published Marketplace listing and perform clean-install smoke
+   testing.
+
+Do not reuse a released version number. If publication fails after the version is
+accepted by Marketplace, diagnose the existing version before creating a new
+release commit and tag.

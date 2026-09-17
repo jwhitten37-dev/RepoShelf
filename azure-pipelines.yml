@@ -1,28 +1,176 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - "v*"
 
-pool:
-  vmImage: ubuntu-latest
+pr:
+  branches:
+    include:
+      - main
 
-steps:
-# Install VS Code Extension Manager (vsce >= v2.26.1 needed) and dependencies
-- script: |
-    npm install -g @vscode/vsce
-    npm install
-  displayName: "Install vsce and dependencies"
+variables:
+  nodeVersion: "24.21.0"
+  vsixArtifactName: "reposhelf-vsix"
 
-# Publish
-- task: AzureCLI@2
-  displayName: 'Publish using managed identity'
-  inputs:
-    azureSubscription: Azure
-    scriptType: pscore
-    scriptLocation: inlineScript
-    inlineScript: |
-      vsce publish --azure-credential
+stages:
+  - stage: Validate
+    displayName: Validate and package
+    jobs:
+      - job: Build
+        displayName: Build validated VSIX
+        pool:
+          vmImage: ubuntu-latest
+        timeoutInMinutes: 20
+        steps:
+          - checkout: self
+            fetchDepth: 0
+            persistCredentials: true
 
+          - task: NodeTool@0
+            displayName: Use Node.js $(nodeVersion)
+            inputs:
+              versionSpec: $(nodeVersion)
+
+          - script: npm ci
+            displayName: Install locked dependencies
+
+          - script: npm run check
+            displayName: Run formatting, lint, type checking, and tests
+
+          - script: npm run compile
+            displayName: Build extension bundle
+
+          - script: npm audit --audit-level=high
+            displayName: Audit production and development dependencies
+
+          - bash: |
+              set -euo pipefail
+
+              package_version=`node -p "require('./package.json').version"`
+              package_id=`node -p "require('./package.json').publisher + '.' + require('./package.json').name"`
+
+              if [[ "$package_id" != "chiefwizard.reposhelf" ]]; then
+                echo "Unexpected Marketplace extension ID: $package_id" >&2
+                exit 1
+              fi
+
+              if [[ "$BUILD_SOURCEBRANCH" == refs/tags/* ]]; then
+                expected_tag="v${package_version}"
+                actual_tag="${BUILD_SOURCEBRANCH#refs/tags/}"
+
+                if [[ "$actual_tag" != "$expected_tag" ]]; then
+                  echo "Release tag $actual_tag does not match package version $package_version." >&2
+                  exit 1
+                fi
+
+                git fetch origin main:refs/remotes/origin/main --no-tags
+                if ! git merge-base --is-ancestor "$BUILD_SOURCEVERSION" origin/main; then
+                  echo "Release tag must identify a commit contained in origin/main." >&2
+                  exit 1
+                fi
+              fi
+
+              vsix_path="$(Build.ArtifactStagingDirectory)/reposhelf-${package_version}.vsix"
+              npm exec -- vsce package --out "$vsix_path" --no-yarn --pre-release
+
+              mapfile -t packaged_files < <(unzip -Z1 "$vsix_path" | sort)
+              expected_files=(
+                "[Content_Types].xml"
+                "extension.vsixmanifest"
+                "extension/LICENSE.txt"
+                "extension/dist/extension.js"
+                "extension/dist/extension.js.map"
+                "extension/package.json"
+                "extension/readme.md"
+                "extension/resources/reposhelf-activitybar.svg"
+                "extension/resources/reposhelf-icon.png"
+              )
+
+              if [[ "${packaged_files[*]}" != "${expected_files[*]}" ]]; then
+                echo "VSIX contents differ from the reviewed package allowlist." >&2
+                printf 'Packaged: %s\n' "${packaged_files[@]}" >&2
+                exit 1
+              fi
+
+              unzip -p "$vsix_path" extension/package.json > "$(Agent.TempDirectory)/packaged-package.json"
+              node - "$(Agent.TempDirectory)/packaged-package.json" "$package_version" <<'NODE'
+              const manifest = require(process.argv[2]);
+              const expectedVersion = process.argv[3];
+              const extensionId = `${manifest.publisher}.${manifest.name}`;
+
+              if (extensionId !== "chiefwizard.reposhelf") {
+                throw new Error(`Unexpected packaged extension ID: ${extensionId}`);
+              }
+
+              if (manifest.version !== expectedVersion) {
+                throw new Error(
+                  `Packaged version ${manifest.version} does not match ${expectedVersion}`,
+                );
+              }
+              NODE
+
+              sha256sum "$vsix_path"
+            displayName: Package and inspect VSIX
+
+          - task: PublishPipelineArtifact@1
+            displayName: Retain validated VSIX
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)
+              artifact: $(vsixArtifactName)
+              publishLocation: pipeline
+
+  - stage: Publish
+    displayName: Publish to Visual Studio Marketplace
+    dependsOn: Validate
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    jobs:
+      - deployment: Marketplace
+        displayName: Publish validated VSIX
+        pool:
+          vmImage: ubuntu-latest
+        timeoutInMinutes: 15
+        environment: reposhelf-marketplace
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+
+                - checkout: self
+
+                - task: NodeTool@0
+                  displayName: Use Node.js $(nodeVersion)
+                  inputs:
+                    versionSpec: $(nodeVersion)
+
+                - script: npm ci
+                  displayName: Install locked publishing tool
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download validated VSIX
+                  inputs:
+                    artifact: $(vsixArtifactName)
+                    path: $(Pipeline.Workspace)/$(vsixArtifactName)
+
+                - task: AzureCLI@2
+                  displayName: Publish with Microsoft Entra ID
+                  inputs:
+                    azureSubscription: Azure
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+
+                      mapfile -t vsix_files < <(find "$(Pipeline.Workspace)/$(vsixArtifactName)" -maxdepth 1 -type f -name '*.vsix' -print)
+                      if [[ "${#vsix_files[@]}" -ne 1 ]]; then
+                        echo "Expected exactly one validated VSIX artifact; found ${#vsix_files[@]}." >&2
+                        exit 1
+                      fi
+
+                      npm exec -- vsce publish \
+                        --packagePath "${vsix_files[0]}" \
+                        --azure-credential \
+                        --pre-release

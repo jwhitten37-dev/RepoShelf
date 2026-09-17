@@ -555,8 +555,8 @@ release after team-ready hardening.
 
 ### Deliverables
 
-- Confirm the `jwhitten37-dev` Marketplace publisher and extension identity
-  `jwhitten37-dev.reposhelf`.
+- Use the confirmed `chiefwizard` Marketplace publisher and extension identity
+  `chiefwizard.reposhelf`.
 - Finalize provider-neutral icon, listing graphics, screenshots, categories,
   keywords, and accessibility text using the approved RepoShelf palette.
 - Document privacy behavior, telemetry posture, token storage, network access,

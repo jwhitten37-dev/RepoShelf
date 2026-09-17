@@ -1,5 +1,6 @@
 .vscode/**
 .github/**
+azure-pipelines.yml
 coverage/**
 docs/**
 node_modules/**

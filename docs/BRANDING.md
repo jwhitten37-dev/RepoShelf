@@ -43,12 +43,12 @@ Additional listing screenshots remain deferred until release-readiness review.
 
 ## Metadata tracking
 
-| Field                 | Value/status                                            |
-| --------------------- | ------------------------------------------------------- |
-| Extension ID          | `jwhitten37-dev.reposhelf` (planned)                    |
-| Package name          | `reposhelf`                                             |
-| Source repository     | `jwhitten37-dev/RepoShelf`                              |
-| License               | Apache-2.0                                              |
-| Marketplace publisher | `jwhitten37-dev` (confirmation required before release) |
-| Telemetry             | None                                                    |
-| Release status        | Pre-release; Phase 4 paused                             |
+| Field                 | Value/status                       |
+| --------------------- | ---------------------------------- |
+| Extension ID          | `chiefwizard.reposhelf`            |
+| Package name          | `reposhelf`                        |
+| Source repository     | `jwhitten37-dev/RepoShelf`         |
+| License               | Apache-2.0                         |
+| Marketplace publisher | `chiefwizard` (confirmed)          |
+| Telemetry             | None                               |
+| Release status        | Pre-release; Phase 4 not yet begun |

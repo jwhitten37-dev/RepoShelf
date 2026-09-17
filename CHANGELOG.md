@@ -10,6 +10,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Public-source repository governance, security policy, and automated checks.
 - RepoShelf provider-neutral product identity and package metadata.
+- Secretless Azure Pipelines packaging and Marketplace publishing through
+  Microsoft Entra workload identity federation.
 
 ### Changed
 

@@ -66,6 +66,9 @@ npm run build
 If you use [mise](https://mise.jdx.dev/), run commands through `mise exec --` to
 use the pinned Node.js version.
 
+Marketplace packaging and the Microsoft Entra workload-identity release process
+are documented in [docs/PUBLISHING.md](./docs/PUBLISHING.md).
+
 To exercise the extension UI, open the checkout in VS Code, select
 **Run RepoShelf Extension** in Run and Debug, and press `F5`. Use only an
 authorized test instance and least-privilege credentials.
