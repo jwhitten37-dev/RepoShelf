@@ -535,7 +535,7 @@ The extension should **recommend** cleanup based on state and disk size, but sho
 
 ## Preservation checkpoint: RepoShelf public-source transition
 
-**Status:** in progress; Phase 4 is intentionally paused.
+**Status:** transition complete; Phase 4 safety-foundation work is in progress.
 
 - Phase 3 implementation and manual validation are complete.
 - Product identity is **RepoShelf**: _Remote-first repository workspaces for VS
@@ -546,7 +546,8 @@ The extension should **recommend** cleanup based on state and disk size, but sho
 - Public-source preparation includes an Apache-2.0 license, contributor and
   security guidance, automated checks, secret scanning, and GitHub publication.
 - Corporate test identifiers and ownership-marker contents are not retained.
-- Phase 4 does not begin as part of this checkpoint.
+- Phase 4 began after this checkpoint with a non-destructive, fail-closed
+  workspace safety assessment. Push and deletion remain separate later slices.
 
 ## Phase 7: Marketplace release readiness
 

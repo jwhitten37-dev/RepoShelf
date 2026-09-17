@@ -10,9 +10,9 @@ editing and Git tooling are needed. GitLab is the first implemented provider;
 the product identity and architecture remain provider-neutral.
 
 > [!IMPORTANT]
-> RepoShelf is pre-release software. Phase 3 is complete, Phase 4 is paused, and
-> extension-managed push/release or deletion is not implemented. Closing a
-> window never authorizes workspace deletion.
+> RepoShelf is pre-release software. Phase 4 safety-foundation work is in
+> progress, but extension-managed push/release or deletion is not implemented.
+> Closing a window never authorizes workspace deletion.
 
 ## Current capabilities
 
@@ -24,13 +24,16 @@ the product identity and architecture remain provider-neutral.
 - Materialize full or partial+sparse Git workspaces through native Git.
 - Validate clone roots, origins, branches, commits, sparse scope, and private
   ownership markers before creating or reusing a managed workspace.
+- Run a read-only, fail-closed managed-workspace safety assessment covering
+  ownership, containment, dirty/unsaved state, Git operations, remote
+  reachability, and local-only refs.
 - Keep remote file content in a bounded memory-only cache.
 
 See [PHASED-PLAN.md](./PHASED-PLAN.md) for scope and sequencing. Design and
 security contracts are under [docs/phase-0](./docs/phase-0/README.md), with
 implementation records for [Phase 1](./docs/phase-1/README.md),
-[Phase 2](./docs/phase-2/README.md), and
-[Phase 3](./docs/phase-3/README.md).
+[Phase 2](./docs/phase-2/README.md), [Phase 3](./docs/phase-3/README.md), and
+[Phase 4](./docs/phase-4/README.md).
 
 ## Safety and privacy
 
@@ -39,8 +42,9 @@ implementation records for [Phase 1](./docs/phase-1/README.md),
   URLs or process arguments.
 - Native Git authentication is delegated to the host's HTTPS credential helper.
 - Remote source bodies are not persistently cached by RepoShelf.
-- Managed workspace cleanup remains deliberately unavailable until its guarded
-  Phase 4 design is implemented and validated.
+- Managed workspace cleanup remains deliberately unavailable while Phase 4's
+  guarded push, remote verification, and deletion slices are implemented and
+  validated.
 
 Never include credentials, private repository content, internal URLs, project
 identifiers, usernames, or ownership-marker data in public issues or logs. See

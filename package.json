@@ -78,6 +78,12 @@
         "title": "Edit Locally",
         "category": "RepoShelf",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "reposhelf.checkWorkspaceSafety",
+        "title": "Check Workspace Safety",
+        "category": "RepoShelf",
+        "icon": "$(shield)"
       }
     ],
     "viewsContainers": {
