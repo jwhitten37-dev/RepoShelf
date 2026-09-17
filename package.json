@@ -4,7 +4,7 @@
   "description": "Remote-first repository workspaces for VS Code.",
   "version": "0.1.0",
   "private": true,
-  "publisher": "chiefwizard",
+  "publisher": "jwhitten37-dev",
   "license": "Apache-2.0",
   "homepage": "https://github.com/jwhitten37-dev/RepoShelf#readme",
   "repository": {

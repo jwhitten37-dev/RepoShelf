@@ -36,12 +36,12 @@ Marketplace icon and listing assets remain deferred until visual review.
 
 ## Metadata tracking
 
-| Field                 | Value/status                                         |
-| --------------------- | ---------------------------------------------------- |
-| Extension ID          | `chiefwizard.reposhelf` (planned)                    |
-| Package name          | `reposhelf`                                          |
-| Source repository     | `jwhitten37-dev/RepoShelf`                           |
-| License               | Apache-2.0                                           |
-| Marketplace publisher | `chiefwizard` (confirmation required before release) |
-| Telemetry             | None                                                 |
-| Release status        | Pre-release; Phase 4 paused                          |
+| Field                 | Value/status                                            |
+| --------------------- | ------------------------------------------------------- |
+| Extension ID          | `jwhitten37-dev.reposhelf` (planned)                    |
+| Package name          | `reposhelf`                                             |
+| Source repository     | `jwhitten37-dev/RepoShelf`                              |
+| License               | Apache-2.0                                              |
+| Marketplace publisher | `jwhitten37-dev` (confirmation required before release) |
+| Telemetry             | None                                                    |
+| Release status        | Pre-release; Phase 4 paused                             |
