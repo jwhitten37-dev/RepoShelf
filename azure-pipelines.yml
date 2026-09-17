@@ -1,0 +1,28 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+# Install VS Code Extension Manager (vsce >= v2.26.1 needed) and dependencies
+- script: |
+    npm install -g @vscode/vsce
+    npm install
+  displayName: "Install vsce and dependencies"
+
+# Publish
+- task: AzureCLI@2
+  displayName: 'Publish using managed identity'
+  inputs:
+    azureSubscription: Azure
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      vsce publish --azure-credential
+
