@@ -135,6 +135,11 @@ Every phase must:
 
 ### Phase 4.1 — coordinated release and workspace UX
 
+Phase 4.1 uses separate architecture, protocol implementation, UX, and native
+Windows gates. The exact commands, automated suites, Extension Development Host
+scenarios, and evidence requirements are in the
+[Phase 4.1 test plan](../phase-4.1/TESTING.md).
+
 - The original catalog window coordinates normal release, while restart-safe
   fallback succeeds when it is absent, without duplicate processing.
 - Closing either window, coordinator/session crashes, lease expiry, stopped

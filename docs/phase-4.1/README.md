@@ -2,8 +2,8 @@
 
 ## Status
 
-**Planned side phase before Phase 5.** Phase 4 established a safe restart-based
-Windows release path. Phase 4.1 will retain that path as a fallback while adding
+**Phase 4.1A architecture review ready.** Phase 4 established a safe restart-based
+Windows release path. Phase 4.1 retains that path as a fallback while adding
 cross-window coordination, retained-workspace lifecycle UX, visible release
 actions, reminders, and recovery behavior suitable for production use.
 
@@ -34,6 +34,17 @@ is coordination evidence only and never deletion authority.
 
 ## Phase 4.1A: Architecture and threat model
 
+The implementation contracts are:
+
+- [Coordination protocol](./COORDINATION-PROTOCOL.md)
+- [Threat and recovery review](./THREAT-MODEL.md)
+- [Subphase test plan](./TESTING.md)
+
+Phase 4.1B cannot begin until these contracts complete review and the 4.1A gate
+passes. In particular, claims are atomic and non-stealable: claimant failure
+retains the checkout and requires a newly confirmed operation rather than unsafe
+stale-lock takeover.
+
 Define and review before coordinator implementation:
 
 - A host-local, workspace-scoped operation journal under extension-controlled
@@ -45,8 +56,9 @@ Define and review before coordinator implementation:
 - Random coordinator and managed-window session IDs with expiring leases.
 - Exclusive, atomic claim semantics so exactly one eligible extension host can
   process a release request.
-- Lease expiry and crash recovery. An expired lease permits investigation or a
-  new claim; it does not permit deletion.
+- Lease expiry and crash recovery. An expired lease permits investigation and may
+  allow a still-unclaimed operation's fallback claimant to race for its one atomic
+  claim; an existing claim is never stolen. Neither case permits deletion.
 - Explicit user authorization boundaries, request expiration, replay prevention,
   schema versioning, duplicate suppression, and clock/sleep handling.
 - Registry concurrency and completion reconciliation.

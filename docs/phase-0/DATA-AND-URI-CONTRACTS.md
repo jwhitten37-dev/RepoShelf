@@ -93,6 +93,7 @@ Runtime code must validate data read from settings or storage.
 | Clone root                                                 | Remote/machine-scoped VS Code setting                    | Persistent per host           |
 | Selected refs, favorites, recent projects, sparse profiles | Extension global state                                   | Persistent per extension host |
 | Managed workspace registry                                 | Extension global state plus checkout marker              | Persistent per extension host |
+| Phase 4.1 coordination journal                             | Files below extension host `globalStorageUri`            | Bounded host-local metadata   |
 | Catalog/tree metadata                                      | Memory initially; safe metadata persistence may be added | Bounded                       |
 | Repository file bytes                                      | Memory only in Phases 1–5                                | Bounded, cleared on host exit |
 | Git/worktree truth                                         | Filesystem and native Git                                | Authoritative                 |
@@ -101,6 +102,11 @@ Runtime code must validate data read from settings or storage.
 The registry is an index, not deletion authority. A registry entry without a
 valid marker and complete filesystem/Git validation can be forgotten but not
 used to delete a path.
+
+The Phase 4.1 journal uses workspace-scoped, versioned, create-once records and
+atomic claim directories. It is coordination evidence, not filesystem, Git,
+registry, remote, or deletion truth. Its complete contract is in the
+[Phase 4.1 coordination protocol](../phase-4.1/COORDINATION-PROTOCOL.md).
 
 ## Settings contract
 

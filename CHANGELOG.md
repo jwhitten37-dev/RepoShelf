@@ -18,6 +18,8 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Explicit Push and Release and Release Local Workspace commands with post-push
   verification, confirmation, short-lived deletion capabilities, and registry
   recovery behavior.
+- Phase 4.1A coordination protocol, threat/recovery review, and explicit
+  per-subphase automated, integration, UX, and native Windows test gates.
 
 ### Changed
 
