@@ -23,6 +23,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Phase 4.1B coordination record validators and a fail-closed filesystem journal
   with immutable publication, bounded reads, session leases, ordered identity
   binding, and atomic non-stealable claims; runtime coordination remains disabled.
+- Phase 4.1B bounded operation projection and a filesystem-authoritative workspace
+  registry with one-time migration, workspace/path-scoped mutation locks,
+  verified-absence-only removal, and one-way global-state mirror reconciliation.
 
 ### Changed
 

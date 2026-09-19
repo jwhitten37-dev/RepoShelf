@@ -13,6 +13,13 @@ identity-bound transitions, and non-stealable claims. It is intentionally not
 wired to extension activation or deletion yet; the Phase 4 fallback remains the
 only active release flow until the complete 4.1B gate passes.
 
+The 4.1B reconciliation substrate now also implements bounded operation-state
+projection, duplicate active-operation detection, one-time legacy registry
+import, filesystem-authoritative per-workspace snapshots, workspace/path-scoped
+non-stealable mutation locks, exact-record removal after injected fresh absence
+proof, and one-way `globalState` mirror repair. These components also remain
+disconnected from activation until session and handoff integration is complete.
+
 This phase must begin with an architecture and threat-model review. A lock,
 lease, heartbeat, journal entry, successful push, elapsed time, or window closure
 is coordination evidence only and never deletion authority.

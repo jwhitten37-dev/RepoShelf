@@ -5,12 +5,14 @@ import {
   lstat,
   mkdir,
   open,
+  readdir,
   realpath,
   rename,
   unlink,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import type { Dirent } from "node:fs";
 import {
   CoordinationRecordError,
   assertUuid,
@@ -32,8 +34,21 @@ const JOURNAL_DIRECTORY = "coordination-v1";
 const MAX_RECORD_BYTES = 32 * 1_024;
 const FILE_MODE = 0o600;
 const DIRECTORY_MODE = 0o700;
+const MAX_DISCOVERED_WORKSPACES = 256;
+const MAX_OPERATIONS_PER_WORKSPACE = 256;
+const MAX_OPERATION_ARTIFACTS = 16;
 
 export type ClaimResult = "claimed" | "alreadyClaimed";
+
+export interface OperationLocation {
+  readonly workspaceId: string;
+  readonly operationId: string;
+}
+
+export interface OperationArtifacts extends OperationLocation {
+  readonly names: readonly string[];
+  readonly hasUnexpectedArtifacts: boolean;
+}
 
 export class CoordinationJournalError extends Error {
   public constructor(
@@ -62,6 +77,103 @@ export class CoordinationJournal {
 
   public async initialize(): Promise<void> {
     await createSecureDirectory(this.root);
+  }
+
+  public async discoverOperations(): Promise<readonly OperationLocation[]> {
+    await this.initialize();
+    const workspacesDirectory = path.join(this.root, "workspaces");
+    if (!(await exists(workspacesDirectory))) return [];
+    await assertSecureDirectory(workspacesDirectory);
+    const workspaceEntries = await readBoundedDirectory(
+      workspacesDirectory,
+      MAX_DISCOVERED_WORKSPACES,
+    );
+    const locations: OperationLocation[] = [];
+    for (const workspaceEntry of workspaceEntries) {
+      if (!workspaceEntry.isDirectory()) throw unsafeStorage();
+      assertIdentifier(workspaceEntry.name);
+      const operationsDirectory = path.join(
+        workspacesDirectory,
+        workspaceEntry.name,
+        "operations",
+      );
+      const workspaceArtifacts = await readBoundedDirectory(
+        path.join(workspacesDirectory, workspaceEntry.name),
+        MAX_OPERATION_ARTIFACTS,
+      );
+      if (
+        workspaceArtifacts.some(
+          (artifact) =>
+            artifact.name !== "operations" || !artifact.isDirectory(),
+        )
+      ) {
+        throw unsafeStorage();
+      }
+      if (!(await exists(operationsDirectory))) continue;
+      await assertSecureDirectory(operationsDirectory);
+      const operationEntries = await readBoundedDirectory(
+        operationsDirectory,
+        MAX_OPERATIONS_PER_WORKSPACE,
+      );
+      for (const operationEntry of operationEntries) {
+        if (!operationEntry.isDirectory()) throw unsafeStorage();
+        assertIdentifier(operationEntry.name);
+        locations.push({
+          workspaceId: workspaceEntry.name,
+          operationId: operationEntry.name,
+        });
+      }
+    }
+    return locations;
+  }
+
+  public async inspectOperationArtifacts(
+    workspaceId: string,
+    operationId: string,
+  ): Promise<OperationArtifacts> {
+    const directory = this.operationDirectory(workspaceId, operationId);
+    await assertSecureDirectory(directory);
+    const entries = await readBoundedDirectory(
+      directory,
+      MAX_OPERATION_ARTIFACTS,
+    );
+    const names = entries.map(({ name }) => name).sort();
+    const hasUnexpectedArtifacts = entries.some((entry) => {
+      if (/^\.[a-z]+\.json\.[0-9a-f-]+\.tmp$/u.test(entry.name)) {
+        return !entry.isFile();
+      }
+      if (entry.name === "claim") return !entry.isDirectory();
+      return (
+        !entry.isFile() ||
+        (entry.name !== "request.json" &&
+          entry.name !== "detached.json" &&
+          entry.name !== "outcome.json")
+      );
+    });
+    if (!hasUnexpectedArtifacts && names.includes("claim")) {
+      const claimDirectory = path.join(directory, "claim");
+      await assertSecureDirectory(claimDirectory);
+      const claimEntries = await readBoundedDirectory(
+        claimDirectory,
+        MAX_OPERATION_ARTIFACTS,
+      );
+      if (
+        claimEntries.some(
+          (entry) =>
+            (!/^\.claim\.json\.[0-9a-f-]+\.tmp$/u.test(entry.name) &&
+              entry.name !== "claim.json") ||
+            !entry.isFile(),
+        )
+      ) {
+        return {
+          workspaceId,
+          operationId,
+          names,
+          hasUnexpectedArtifacts: true,
+        };
+      }
+    }
+    return { workspaceId, operationId, names, hasUnexpectedArtifacts };
   }
 
   public async publishSessionDescriptor(
@@ -633,6 +745,25 @@ async function exists(candidate: string): Promise<boolean> {
     if (hasCode(error, "ENOENT")) return false;
     throw unsafeStorage(error);
   }
+}
+
+async function readBoundedDirectory(
+  directory: string,
+  maximumEntries: number,
+): Promise<readonly Dirent[]> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    throw unsafeStorage(error);
+  }
+  if (entries.length > maximumEntries) {
+    throw journalError(
+      "unsafeStorage",
+      "Coordination storage exceeds its bounded discovery limit.",
+    );
+  }
+  return entries.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function samePath(left: string, right: string): boolean {
