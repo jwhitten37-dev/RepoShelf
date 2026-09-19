@@ -38,6 +38,19 @@ export interface SessionLease {
   readonly expiresAt: number;
 }
 
+export interface MaterializationHandoff {
+  readonly schemaVersion: 1;
+  readonly recordType: "materializationHandoff";
+  readonly workspaceId: string;
+  readonly canonicalLocalPath: string;
+  readonly coordinatorSessionId: string;
+  readonly managedSessionId: string;
+  readonly environmentFingerprint: string;
+  readonly extensionVersion: string;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+}
+
 export interface ReleaseRequest {
   readonly schemaVersion: 1;
   readonly recordType: "releaseRequest";
@@ -174,6 +187,45 @@ export function parseSessionLease(value: unknown): SessionLease {
     invalid();
   }
   return value as unknown as SessionLease;
+}
+
+export function parseMaterializationHandoff(
+  value: unknown,
+): MaterializationHandoff {
+  assertBoundedValue(value);
+  assertExactKeys(value, [
+    "schemaVersion",
+    "recordType",
+    "workspaceId",
+    "canonicalLocalPath",
+    "coordinatorSessionId",
+    "managedSessionId",
+    "environmentFingerprint",
+    "extensionVersion",
+    "createdAt",
+    "expiresAt",
+  ]);
+  if (
+    value.schemaVersion !== 1 ||
+    value.recordType !== "materializationHandoff"
+  ) {
+    invalid();
+  }
+  assertUuid(value.workspaceId);
+  assertAbsolutePath(value.canonicalLocalPath);
+  assertUuid(value.coordinatorSessionId);
+  assertUuid(value.managedSessionId);
+  assertString(value.environmentFingerprint, SHA256_PATTERN, 64);
+  assertString(value.extensionVersion, undefined, MAX_EXTENSION_VERSION_LENGTH);
+  assertTimestamp(value.createdAt);
+  assertTimestamp(value.expiresAt);
+  if (
+    value.expiresAt <= value.createdAt ||
+    value.expiresAt - value.createdAt > MAX_LEASE_LIFETIME_MS
+  ) {
+    invalid();
+  }
+  return value as unknown as MaterializationHandoff;
 }
 
 export function parseReleaseRequest(value: unknown): ReleaseRequest {

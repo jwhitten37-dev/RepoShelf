@@ -10,15 +10,24 @@ release actions, reminders, and recovery behavior suitable for production use.
 The 4.1B storage substrate now implements strict bounded record parsing,
 no-follow journal setup, immutable publication, atomic lease replacement, ordered
 identity-bound transitions, and non-stealable claims. It is intentionally not
-wired to extension activation or deletion yet; the Phase 4 fallback remains the
-only active release flow until the complete 4.1B gate passes.
+used to authorize or execute deletion; the Phase 4 fallback remains the only
+active release flow until the complete 4.1B gate passes.
 
 The 4.1B reconciliation substrate now also implements bounded operation-state
 projection, duplicate active-operation detection, one-time legacy registry
 import, filesystem-authoritative per-workspace snapshots, workspace/path-scoped
 non-stealable mutation locks, exact-record removal after injected fresh absence
-proof, and one-way `globalState` mirror repair. These components also remain
-disconnected from activation until session and handoff integration is complete.
+proof, and one-way `globalState` mirror repair. Registry authority remains
+disconnected from deletion until distributed authorization integration is complete.
+
+The 4.1B session slice now creates coordinator, managed, and detached host
+sessions; publishes privacy-preserving environment fingerprints and monotonic
+leases; detects sleep and clock anomalies; binds managed windows through bounded
+immutable materialization handoffs; and publishes detachment evidence only after
+consuming a schema-v2 restart intent. Exact coordinator-versus-fallback claim
+arbitration and independent-process crash/race tests are implemented. Arbitration
+is not connected to deletion: the Phase 4 restarted-host flow remains the only
+active deletion path until 4.1B-4 adds distributed authorization and recovery.
 
 This phase must begin with an architecture and threat-model review. A lock,
 lease, heartbeat, journal entry, successful push, elapsed time, or window closure

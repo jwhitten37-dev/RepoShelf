@@ -9,6 +9,18 @@ import type { RefStore } from "./refStore.js";
 import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
 import type { VsCodeWorkspaceRegistry } from "./workspaceRegistry.js";
 import type { PendingReleaseStore } from "./pendingReleaseStore.js";
+import type { PendingReleaseIntent } from "./pendingReleaseStore.js";
+import type { ReleaseOperationKind } from "../infrastructure/coordinationRecords.js";
+
+export interface WorkspaceReleaseCoordination {
+  createPendingRelease(
+    record: ManagedWorkspaceRecord,
+    expectedHeadSha: string,
+    operationKind: ReleaseOperationKind,
+    confirmationAt: number,
+  ): Promise<PendingReleaseIntent>;
+  acknowledgeDetachment(intent: PendingReleaseIntent): Promise<void>;
+}
 
 export class WorkspaceReleaseCommand {
   public constructor(
@@ -18,6 +30,7 @@ export class WorkspaceReleaseCommand {
     private readonly catalog: CatalogTreeProvider,
     private readonly logger: Logger,
     private readonly pending: PendingReleaseStore,
+    private readonly coordination?: WorkspaceReleaseCoordination,
   ) {}
 
   public release(): Promise<void> {
@@ -62,6 +75,7 @@ export class WorkspaceReleaseCommand {
         action,
       );
       if (confirmed !== action) return;
+      const confirmationAt = Date.now();
 
       const verified = push
         ? await this.withProgress(
@@ -99,7 +113,30 @@ export class WorkspaceReleaseCommand {
         record.targetBranch,
       );
       void capability;
-      await this.pending.create(record.workspaceId, verified.snapshot.headSha);
+      try {
+        if (this.coordination === undefined) {
+          await this.pending.create(
+            record.workspaceId,
+            verified.snapshot.headSha,
+          );
+        } else {
+          await this.coordination.createPendingRelease(
+            record,
+            verified.snapshot.headSha,
+            push ? "pushAndRelease" : "release",
+            confirmationAt,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          "Coordination request publication failed; retaining the Phase 4 restart-safe flow",
+          error,
+        );
+        await this.pending.create(
+          record.workspaceId,
+          verified.snapshot.headSha,
+        );
+      }
       try {
         await vscode.commands.executeCommand("workbench.action.closeFolder");
       } catch (error) {
@@ -126,6 +163,16 @@ export class WorkspaceReleaseCommand {
           "configuration",
           "Pending release resumed with a workspace still open; deletion was not attempted.",
         );
+      }
+      if (this.coordination !== undefined) {
+        try {
+          await this.coordination.acknowledgeDetachment(intent);
+        } catch (error) {
+          this.logger.error(
+            "Coordination detachment acknowledgement failed; continuing the Phase 4 restart-safe flow",
+            error,
+          );
+        }
       }
       const record = this.registry
         .list()

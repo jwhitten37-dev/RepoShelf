@@ -1,0 +1,125 @@
+import type { CoordinationJournal } from "./coordinationJournal.js";
+import type {
+  ReleaseClaim,
+  ReleaseRequest,
+  SessionDescriptor,
+} from "./coordinationRecords.js";
+
+const COORDINATOR_PREFERENCE_MS = 5_000;
+
+export type ClaimDecision =
+  | "claimed"
+  | "observing"
+  | "notDetached"
+  | "requestExpired"
+  | "coordinatorPreferred"
+  | "incompatibleSession";
+
+export class CoordinationClaimArbiter {
+  public constructor(
+    private readonly journal: CoordinationJournal,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  public async attemptClaim(
+    request: ReleaseRequest,
+    claimant: SessionDescriptor,
+  ): Promise<ClaimDecision> {
+    const detachment = await this.journal.readDetachment(
+      request.workspaceId,
+      request.operationId,
+    );
+    if (detachment === undefined) return "notDetached";
+    if (claimant.role === "managed") return "incompatibleSession";
+    if (
+      (claimant.role === "coordinator" &&
+        claimant.sessionId !== request.coordinatorSessionId) ||
+      (claimant.role === "detached" &&
+        claimant.sessionId !== detachment.detachedSessionId)
+    ) {
+      return "incompatibleSession";
+    }
+    const publishedClaimant = await this.journal.readSessionDescriptor(
+      claimant.sessionId,
+    );
+    if (!sameSession(publishedClaimant, claimant)) return "incompatibleSession";
+    const now = this.now();
+    if (now < request.createdAt || now > request.expiresAt)
+      return "requestExpired";
+    if (!(await this.hasLiveLease(claimant, now))) return "incompatibleSession";
+    const coordinator = await this.journal.readSessionDescriptor(
+      request.coordinatorSessionId,
+    );
+    if (
+      coordinator === undefined ||
+      coordinator.environmentFingerprint !== claimant.environmentFingerprint ||
+      coordinator.extensionVersion !== claimant.extensionVersion
+    ) {
+      return "incompatibleSession";
+    }
+    if (
+      claimant.role === "detached" &&
+      now < detachment.detachedAt + COORDINATOR_PREFERENCE_MS &&
+      (await this.hasLiveLease(coordinator, now))
+    ) {
+      return "coordinatorPreferred";
+    }
+    const claim: ReleaseClaim = {
+      schemaVersion: 1,
+      recordType: "releaseClaim",
+      ...operationBinding(request),
+      claimantSessionId: claimant.sessionId,
+      claimantBootNonce: claimant.bootNonce,
+      claimantRole: claimant.role,
+      claimedAt: now,
+    };
+    return (await this.journal.claim(claim)) === "claimed"
+      ? "claimed"
+      : "observing";
+  }
+
+  private async hasLiveLease(
+    descriptor: SessionDescriptor,
+    now: number,
+  ): Promise<boolean> {
+    const lease = await this.journal.readLease(descriptor.sessionId);
+    return (
+      lease !== undefined &&
+      lease.bootNonce === descriptor.bootNonce &&
+      lease.observedAt <= now &&
+      lease.expiresAt >= now
+    );
+  }
+}
+
+function sameSession(
+  published: SessionDescriptor | undefined,
+  claimant: SessionDescriptor,
+): boolean {
+  return (
+    published !== undefined &&
+    published.sessionId === claimant.sessionId &&
+    published.bootNonce === claimant.bootNonce &&
+    published.role === claimant.role &&
+    published.environmentFingerprint === claimant.environmentFingerprint &&
+    published.extensionVersion === claimant.extensionVersion
+  );
+}
+
+function operationBinding(request: ReleaseRequest) {
+  return {
+    workspaceId: request.workspaceId,
+    operationId: request.operationId,
+    requestNonce: request.requestNonce,
+    operationKind: request.operationKind,
+    instanceId: request.instanceId,
+    projectId: request.projectId,
+    canonicalRepositoryUrl: request.canonicalRepositoryUrl,
+    targetBranch: request.targetBranch,
+    canonicalLocalPath: request.canonicalLocalPath,
+    canonicalCloneRoot: request.canonicalCloneRoot,
+    expectedHeadSha: request.expectedHeadSha,
+    coordinatorSessionId: request.coordinatorSessionId,
+    managedSessionId: request.managedSessionId,
+  };
+}

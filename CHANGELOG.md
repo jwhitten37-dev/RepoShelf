@@ -22,10 +22,14 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   per-subphase automated, integration, UX, and native Windows test gates.
 - Phase 4.1B coordination record validators and a fail-closed filesystem journal
   with immutable publication, bounded reads, session leases, ordered identity
-  binding, and atomic non-stealable claims; runtime coordination remains disabled.
+  binding, and atomic non-stealable claims; coordinated deletion remains disabled.
 - Phase 4.1B bounded operation projection and a filesystem-authoritative workspace
   registry with one-time migration, workspace/path-scoped mutation locks,
   verified-absence-only removal, and one-way global-state mirror reconciliation.
+- Phase 4.1B cross-window session descriptors, privacy-preserving environment
+  fingerprints, monotonic lease renewal and anomaly handling, immutable
+  materialization handoffs, upgrade-safe detachment acknowledgements, and exact
+  coordinator/fallback claim arbitration; coordinated deletion remains disabled.
 
 ### Changed
 

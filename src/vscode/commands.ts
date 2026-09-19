@@ -8,6 +8,7 @@ import {
 } from "../domain/remoteUri.js";
 import type { Logger } from "../infrastructure/logger.js";
 import type { MaterializationService } from "../infrastructure/materialization.js";
+import type { ManagedWorkspaceRecord } from "../domain/models.js";
 import type { TokenStore } from "../infrastructure/secretStore.js";
 import type {
   CatalogNode,
@@ -27,6 +28,9 @@ export class CommandController {
     private readonly logger: Logger,
     private readonly materialization: MaterializationService,
     private readonly extensionSourceRoot: string,
+    private readonly beforeOpenManagedWorkspace?: (
+      record: ManagedWorkspaceRecord,
+    ) => Promise<void>,
   ) {}
 
   public async addInstance(): Promise<void> {
@@ -281,6 +285,16 @@ export class CommandController {
       this.logger.info(
         `${result.reused ? "Reusing" : "Created"} managed workspace ${result.record.workspaceId} at ${result.record.localPath}`,
       );
+      if (this.beforeOpenManagedWorkspace !== undefined) {
+        try {
+          await this.beforeOpenManagedWorkspace(result.record);
+        } catch (error) {
+          this.logger.error(
+            "Coordination handoff publication failed; opening with the Phase 4 lifecycle",
+            error,
+          );
+        }
+      }
       await vscode.commands.executeCommand(
         "vscode.openFolder",
         vscode.Uri.file(result.record.localPath),

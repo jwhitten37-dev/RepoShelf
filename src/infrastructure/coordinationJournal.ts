@@ -17,12 +17,14 @@ import {
   CoordinationRecordError,
   assertUuid,
   parseDetachmentAcknowledgement,
+  parseMaterializationHandoff,
   parseReleaseClaim,
   parseReleaseOutcome,
   parseReleaseRequest,
   parseSessionDescriptor,
   parseSessionLease,
   type DetachmentAcknowledgement,
+  type MaterializationHandoff,
   type ReleaseClaim,
   type ReleaseOutcome,
   type ReleaseRequest,
@@ -37,6 +39,7 @@ const DIRECTORY_MODE = 0o700;
 const MAX_DISCOVERED_WORKSPACES = 256;
 const MAX_OPERATIONS_PER_WORKSPACE = 256;
 const MAX_OPERATION_ARTIFACTS = 16;
+const MAX_HANDOFFS_PER_WORKSPACE = 32;
 
 export type ClaimResult = "claimed" | "alreadyClaimed";
 
@@ -104,7 +107,9 @@ export class CoordinationJournal {
       if (
         workspaceArtifacts.some(
           (artifact) =>
-            artifact.name !== "operations" || !artifact.isDirectory(),
+            (artifact.name !== "operations" || !artifact.isDirectory()) &&
+            (artifact.name !== "materialization-handoffs" ||
+              !artifact.isDirectory()),
         )
       ) {
         throw unsafeStorage();
@@ -243,6 +248,63 @@ export class CoordinationJournal {
       }
       throw error;
     }
+  }
+
+  public async publishMaterializationHandoff(
+    handoff: MaterializationHandoff,
+  ): Promise<void> {
+    const valid = validate(parseMaterializationHandoff, handoff);
+    await this.publishImmutable(
+      path.join(
+        this.root,
+        "workspaces",
+        valid.workspaceId,
+        "materialization-handoffs",
+        `${valid.managedSessionId}.json`,
+      ),
+      valid,
+    );
+  }
+
+  public async readMaterializationHandoffs(
+    workspaceId: string,
+  ): Promise<readonly MaterializationHandoff[]> {
+    assertIdentifier(workspaceId);
+    const directory = path.join(
+      this.root,
+      "workspaces",
+      workspaceId,
+      "materialization-handoffs",
+    );
+    if (!(await exists(directory))) return [];
+    await assertSecureDirectory(directory);
+    const entries = await readBoundedDirectory(
+      directory,
+      MAX_HANDOFFS_PER_WORKSPACE,
+    );
+    const handoffs: MaterializationHandoff[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".json"))
+        throw unsafeStorage();
+      const managedSessionId = entry.name.slice(0, -".json".length);
+      assertIdentifier(managedSessionId);
+      const handoff = await this.readImmutable(
+        path.join(directory, entry.name),
+        parseMaterializationHandoff,
+      );
+      if (
+        handoff === undefined ||
+        handoff.workspaceId !== workspaceId ||
+        handoff.managedSessionId !== managedSessionId
+      ) {
+        throw journalError(
+          "invalidRecord",
+          "Materialization handoff does not match its workspace path.",
+        );
+      }
+      handoffs.push(handoff);
+    }
+    return handoffs;
   }
 
   public async publishRequest(request: ReleaseRequest): Promise<void> {

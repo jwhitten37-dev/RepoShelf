@@ -24,6 +24,7 @@ import { VsCodeWorkspaceRegistry } from "./vscode/workspaceRegistry.js";
 import { WorkspaceSafetyCommand } from "./vscode/workspaceSafetyCommand.js";
 import { WorkspaceReleaseCommand } from "./vscode/workspaceReleaseCommand.js";
 import { PendingReleaseStore } from "./vscode/pendingReleaseStore.js";
+import { VsCodeCoordinationLifecycle } from "./vscode/coordinationLifecycle.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -38,6 +39,21 @@ export async function activate(
   const refs = new RefStore(context.globalState);
   const workspaceRegistry = new VsCodeWorkspaceRegistry(context.globalState);
   const pendingRelease = new PendingReleaseStore(context.globalState);
+  let coordination: VsCodeCoordinationLifecycle | undefined;
+  try {
+    coordination = await VsCodeCoordinationLifecycle.start(
+      context,
+      workspaceRegistry,
+      pendingRelease,
+      logger,
+    );
+    context.subscriptions.push(coordination);
+  } catch (error) {
+    logger.error(
+      "Coordination session startup failed; retaining the Phase 4 lifecycle",
+      error,
+    );
+  }
   const git = new NativeGitRunner();
   const materialization = new MaterializationService(git, workspaceRegistry);
   const workspaceSafety = new WorkspaceSafetyCommand(
@@ -57,6 +73,7 @@ export async function activate(
     catalog,
     logger,
     pendingRelease,
+    coordination,
   );
   const remoteFiles = new RemoteFileSystemProvider(
     instances,
@@ -72,6 +89,9 @@ export async function activate(
     logger,
     materialization,
     context.extensionUri.fsPath,
+    coordination === undefined
+      ? undefined
+      : (record) => coordination.beforeOpenManagedWorkspace(record),
   );
 
   context.subscriptions.push(

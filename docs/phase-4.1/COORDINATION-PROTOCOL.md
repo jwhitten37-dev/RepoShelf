@@ -69,6 +69,21 @@ random boot nonce. The fingerprint distinguishes incompatible VS Code execution
 environments without containing a username, hostname, or credential. It is not
 an authentication secret.
 
+### Materialization handoff
+
+Before opening a managed checkout in a new window, the coordinator publishes an
+immutable workspace-scoped handoff containing the workspace ID, canonical local
+path, coordinator session ID, a preallocated managed session ID, environment
+fingerprint, extension version, creation time, and short expiry. Handoffs are
+individually named by managed session ID and discovered with a strict bound.
+
+The managed host adopts a handoff only when exactly one unexpired record matches
+its registered workspace path, execution environment, and extension version, and
+no descriptor already exists for the preallocated managed session ID. Immutable
+descriptor publication makes adoption one-time under a race. Missing, ambiguous,
+expired, incompatible, or previously adopted handoffs disable coordination for
+that host without preventing the existing Phase 4 lifecycle.
+
 ## Record contract
 
 Every record has `schemaVersion: 1`, `recordType`, and the complete binding needed
@@ -114,6 +129,12 @@ This record is evidence that the requested VS Code transition occurred. It is
 not proof that no other editor or process has the checkout open. A missing or
 conflicting acknowledgement blocks coordinator processing and leaves the current
 Phase 4 empty-host recovery path available.
+
+New restart intents use schema v2 and embed the complete validated release request
+plus an independent intent ID. Existing schema-v1 intents remain consumable only
+by the Phase 4 restart-safe path and cannot produce detachment acknowledgements.
+Intent consumption precedes acknowledgement publication, so replay cannot create
+additional evidence.
 
 ### Session lease
 
