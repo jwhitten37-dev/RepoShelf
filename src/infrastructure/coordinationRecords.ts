@@ -130,6 +130,17 @@ export interface ReleaseOutcome {
   readonly diagnosticCode?: string;
 }
 
+export interface ReleaseCancellation {
+  readonly schemaVersion: 1;
+  readonly recordType: "releaseCancellation";
+  readonly workspaceId: string;
+  readonly operationId: string;
+  readonly requestNonce: string;
+  readonly cancellingSessionId: string;
+  readonly cancellingBootNonce: string;
+  readonly cancelledAt: number;
+}
+
 export class CoordinationRecordError extends Error {
   public constructor(
     message = "Coordination record is invalid or unsupported.",
@@ -345,6 +356,28 @@ export function parseReleaseOutcome(value: unknown): ReleaseOutcome {
     invalid();
   }
   return value as unknown as ReleaseOutcome;
+}
+
+export function parseReleaseCancellation(value: unknown): ReleaseCancellation {
+  assertBoundedValue(value);
+  assertExactKeys(value, [
+    "schemaVersion",
+    "recordType",
+    "workspaceId",
+    "operationId",
+    "requestNonce",
+    "cancellingSessionId",
+    "cancellingBootNonce",
+    "cancelledAt",
+  ]);
+  assertHeader(value, "releaseCancellation");
+  assertUuid(value.workspaceId);
+  assertUuid(value.operationId);
+  assertUuid(value.requestNonce);
+  assertUuid(value.cancellingSessionId);
+  assertUuid(value.cancellingBootNonce);
+  assertTimestamp(value.cancelledAt);
+  return value as unknown as ReleaseCancellation;
 }
 
 export function assertUuid(value: unknown): asserts value is string {

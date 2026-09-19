@@ -4,7 +4,13 @@ import type { WorkspaceRegistry } from "../infrastructure/materialization.js";
 
 const STORAGE_KEY = "reposhelf.managedWorkspaces.v1";
 
-export class VsCodeWorkspaceRegistry implements WorkspaceRegistry {
+export interface LoadedWorkspaceRegistry extends WorkspaceRegistry {
+  list(): readonly ManagedWorkspaceRecord[];
+  remove(workspaceId: string): Promise<void>;
+  reload(): Promise<void>;
+}
+
+export class VsCodeWorkspaceRegistry implements LoadedWorkspaceRegistry {
   public constructor(private readonly state: vscode.Memento) {}
 
   public getByLocalPath(localPath: string): ManagedWorkspaceRecord | undefined {
@@ -30,6 +36,14 @@ export class VsCodeWorkspaceRegistry implements WorkspaceRegistry {
       STORAGE_KEY,
       this.read().filter((record) => record.workspaceId !== workspaceId),
     );
+  }
+
+  public replace(records: readonly ManagedWorkspaceRecord[]): Promise<void> {
+    return Promise.resolve(this.state.update(STORAGE_KEY, records));
+  }
+
+  public reload(): Promise<void> {
+    return Promise.resolve();
   }
 
   private read(): ManagedWorkspaceRecord[] {

@@ -29,6 +29,14 @@ export class CoordinationClaimArbiter {
       request.workspaceId,
       request.operationId,
     );
+    if (
+      (await this.journal.readCancellation(
+        request.workspaceId,
+        request.operationId,
+      )) !== undefined
+    ) {
+      return "observing";
+    }
     if (detachment === undefined) return "notDetached";
     if (claimant.role === "managed") return "incompatibleSession";
     if (
@@ -47,6 +55,18 @@ export class CoordinationClaimArbiter {
     if (now < request.createdAt || now > request.expiresAt)
       return "requestExpired";
     if (!(await this.hasLiveLease(claimant, now))) return "incompatibleSession";
+    const managed = await this.journal.readSessionDescriptor(
+      request.managedSessionId,
+    );
+    if (
+      managed === undefined ||
+      managed.role !== "managed" ||
+      managed.environmentFingerprint !== claimant.environmentFingerprint ||
+      managed.extensionVersion !== claimant.extensionVersion ||
+      (await this.hasLiveLease(managed, now))
+    ) {
+      return "incompatibleSession";
+    }
     const coordinator = await this.journal.readSessionDescriptor(
       request.coordinatorSessionId,
     );

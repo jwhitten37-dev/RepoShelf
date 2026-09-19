@@ -7,27 +7,30 @@ restart-based Windows release path. Phase 4.1 retains that path as a fallback
 while adding cross-window coordination, retained-workspace lifecycle UX, visible
 release actions, reminders, and recovery behavior suitable for production use.
 
-The 4.1B storage substrate now implements strict bounded record parsing,
-no-follow journal setup, immutable publication, atomic lease replacement, ordered
-identity-bound transitions, and non-stealable claims. It is intentionally not
-used to authorize or execute deletion; the Phase 4 fallback remains the only
-active release flow until the complete 4.1B gate passes.
+The 4.1B storage substrate implements strict bounded record parsing, no-follow
+journal setup, immutable publication, atomic lease replacement, ordered
+identity-bound transitions, cancellation, and non-stealable claims.
 
 The 4.1B reconciliation substrate now also implements bounded operation-state
 projection, duplicate active-operation detection, one-time legacy registry
 import, filesystem-authoritative per-workspace snapshots, workspace/path-scoped
 non-stealable mutation locks, exact-record removal after injected fresh absence
-proof, and one-way `globalState` mirror repair. Registry authority remains
-disconnected from deletion until distributed authorization integration is complete.
+proof, and one-way `globalState` mirror repair. The filesystem registry is now the
+active authority for materialization, safety checks, legacy release, coordinated
+release, recovery, and mirror repair.
 
 The 4.1B session slice now creates coordinator, managed, and detached host
 sessions; publishes privacy-preserving environment fingerprints and monotonic
 leases; detects sleep and clock anomalies; binds managed windows through bounded
 immutable materialization handoffs; and publishes detachment evidence only after
 consuming a schema-v2 restart intent. Exact coordinator-versus-fallback claim
-arbitration and independent-process crash/race tests are implemented. Arbitration
-is not connected to deletion: the Phase 4 restarted-host flow remains the only
-active deletion path until 4.1B-4 adds distributed authorization and recovery.
+arbitration and independent-process crash/race tests are implemented. Phase
+4.1B-4 connects the sole claimant to deletion only through complete distributed
+evidence validation, fresh Phase 4 checks, a short-lived in-memory capability,
+and immediate pre-removal revalidation. Recovery never steals a claim or deletes;
+it reconciles metadata only after fresh filesystem absence proof. Legacy schema-v1
+restart intents retain the Phase 4 path. Extension Development Host validation is
+still required before the complete Phase 4.1B gate is closed.
 
 This phase must begin with an architecture and threat-model review. A lock,
 lease, heartbeat, journal entry, successful push, elapsed time, or window closure

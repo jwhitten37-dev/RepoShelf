@@ -75,6 +75,78 @@ describe("CoordinationProjection", () => {
     ]);
   });
 
+  it("blocks unclaimed cancellation but lets verified absence win after claim", async () => {
+    const { journal, projection } = await createProjection();
+    await journal.publishSessionDescriptor({
+      schemaVersion: 1,
+      recordType: "sessionDescriptor",
+      sessionId: MANAGED_ID,
+      role: "managed",
+      createdAt: 500,
+      environmentFingerprint: "a".repeat(64),
+      extensionVersion: "0.1.0",
+      bootNonce: BOOT_NONCE,
+    });
+    await journal.publishSessionDescriptor({
+      schemaVersion: 1,
+      recordType: "sessionDescriptor",
+      sessionId: CLAIMANT_ID,
+      role: "coordinator",
+      createdAt: 500,
+      environmentFingerprint: "a".repeat(64),
+      extensionVersion: "0.1.0",
+      bootNonce: BOOT_NONCE,
+    });
+    const request = makeRequest(WORKSPACE_ID, OPERATION_ID, REQUEST_NONCE);
+    await journal.publishRequest(request);
+    await journal.publishCancellation({
+      schemaVersion: 1,
+      recordType: "releaseCancellation",
+      workspaceId: request.workspaceId,
+      operationId: request.operationId,
+      requestNonce: request.requestNonce,
+      cancellingSessionId: MANAGED_ID,
+      cancellingBootNonce: BOOT_NONCE,
+      cancelledAt: 1_500,
+    });
+    await expect(projection.projectAll()).resolves.toMatchObject([
+      { state: "blocked", cancellation: { cancelledAt: 1_500 } },
+    ]);
+
+    const claimedRequest = makeRequest(WORKSPACE_ID, uuid(90), uuid(91));
+    await journal.publishRequest(claimedRequest);
+    await journal.publishDetachment(makeDetachment(claimedRequest));
+    await journal.claim(makeClaim(claimedRequest));
+    await journal.publishCancellation({
+      schemaVersion: 1,
+      recordType: "releaseCancellation",
+      workspaceId: claimedRequest.workspaceId,
+      operationId: claimedRequest.operationId,
+      requestNonce: claimedRequest.requestNonce,
+      cancellingSessionId: CLAIMANT_ID,
+      cancellingBootNonce: BOOT_NONCE,
+      cancelledAt: 3_500,
+    });
+    await expect(
+      projection.project({
+        workspaceId: claimedRequest.workspaceId,
+        operationId: claimedRequest.operationId,
+      }),
+    ).resolves.toMatchObject({ state: "claimed", cancellation: {} });
+    await journal.publishOutcome(makeOutcome(claimedRequest, "completed"));
+
+    await expect(
+      projection.project({
+        workspaceId: claimedRequest.workspaceId,
+        operationId: claimedRequest.operationId,
+      }),
+    ).resolves.toMatchObject({
+      state: "completed",
+      outcome: { deletionVerified: true },
+      cancellation: {},
+    });
+  });
+
   it("poisons multiple active operations in one workspace", async () => {
     const { journal, projection } = await createProjection();
     await journal.publishRequest(

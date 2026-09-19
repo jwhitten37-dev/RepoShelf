@@ -90,6 +90,60 @@ describe("CoordinationClaimArbiter", () => {
       ),
     ).resolves.toBe("requestExpired");
   });
+
+  it("observes a managed-host cancellation without creating a claim", async () => {
+    const journal = await setupJournal();
+    const request = makeRequest();
+    const managed = descriptor("managed", MANAGED_ID);
+    await journal.publishRequest(request);
+    await journal.publishDetachment(makeDetachment(request));
+    await journal.publishCancellation({
+      schemaVersion: 1,
+      recordType: "releaseCancellation",
+      workspaceId: request.workspaceId,
+      operationId: request.operationId,
+      requestNonce: request.requestNonce,
+      cancellingSessionId: managed.sessionId,
+      cancellingBootNonce: managed.bootNonce,
+      cancelledAt: 2_250,
+    });
+
+    const arbiter = new CoordinationClaimArbiter(journal, () => 2_500);
+    await expect(
+      arbiter.attemptClaim(request, descriptor("coordinator", COORDINATOR_ID)),
+    ).resolves.toBe("observing");
+    await expect(
+      journal.readClaim(request.workspaceId, request.operationId),
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not treat detachment as authority while the managed lease is live", async () => {
+    const journal = await setupJournal();
+    const request = makeRequest();
+    const managed = descriptor("managed", MANAGED_ID);
+    await journal.writeLease({
+      schemaVersion: 1,
+      recordType: "sessionLease",
+      sessionId: managed.sessionId,
+      bootNonce: managed.bootNonce,
+      role: managed.role,
+      sequence: 1,
+      observedAt: 1_500,
+      expiresAt: 31_500,
+    });
+    await journal.publishRequest(request);
+    await journal.publishDetachment(makeDetachment(request));
+
+    await expect(
+      new CoordinationClaimArbiter(journal, () => 2_500).attemptClaim(
+        request,
+        descriptor("coordinator", COORDINATOR_ID),
+      ),
+    ).resolves.toBe("incompatibleSession");
+    await expect(
+      journal.readClaim(request.workspaceId, request.operationId),
+    ).resolves.toBeUndefined();
+  });
 });
 
 async function setupJournal(): Promise<CoordinationJournal> {
@@ -99,8 +153,10 @@ async function setupJournal(): Promise<CoordinationJournal> {
   await journal.initialize();
   const coordinator = descriptor("coordinator", COORDINATOR_ID);
   const detached = descriptor("detached", DETACHED_ID);
+  const managed = descriptor("managed", MANAGED_ID);
   await journal.publishSessionDescriptor(coordinator);
   await journal.publishSessionDescriptor(detached);
+  await journal.publishSessionDescriptor(managed);
   await journal.writeLease({
     schemaVersion: 1,
     recordType: "sessionLease",

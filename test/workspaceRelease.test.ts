@@ -175,6 +175,40 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     );
   });
 
+  it("checks a coordinated final authorization guard before native removal", async () => {
+    let removed = false;
+    const guarded = new WorkspaceReleaseService(
+      git,
+      new WorkspaceSafetyCollector(git, true),
+      registry,
+      Date.now,
+      {
+        remove: () => {
+          removed = true;
+          return Promise.resolve();
+        },
+        exists: () => Promise.resolve(true),
+      },
+    );
+    const assessment = await guarded.assessRelease(record, 0);
+    const capability = await guarded.prepareDeletion(
+      record,
+      assessment.snapshot.headSha,
+      0,
+      undefined,
+      false,
+      () => Promise.resolve(false),
+    );
+
+    await expect(guarded.deleteFilesystem(capability, 0)).rejects.toMatchObject(
+      {
+        code: "cancelled",
+      },
+    );
+    expect(removed).toBe(false);
+    expect(registry.record).toEqual(record);
+  });
+
   it("retains the registry record when filesystem removal fails", async () => {
     const removalError = Object.assign(new Error("sensitive native detail"), {
       code: "EBUSY",

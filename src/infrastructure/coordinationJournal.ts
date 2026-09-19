@@ -19,6 +19,7 @@ import {
   parseDetachmentAcknowledgement,
   parseMaterializationHandoff,
   parseReleaseClaim,
+  parseReleaseCancellation,
   parseReleaseOutcome,
   parseReleaseRequest,
   parseSessionDescriptor,
@@ -26,6 +27,7 @@ import {
   type DetachmentAcknowledgement,
   type MaterializationHandoff,
   type ReleaseClaim,
+  type ReleaseCancellation,
   type ReleaseOutcome,
   type ReleaseRequest,
   type SessionDescriptor,
@@ -152,6 +154,7 @@ export class CoordinationJournal {
         !entry.isFile() ||
         (entry.name !== "request.json" &&
           entry.name !== "detached.json" &&
+          entry.name !== "cancelled.json" &&
           entry.name !== "outcome.json")
       );
     });
@@ -388,6 +391,15 @@ export class CoordinationJournal {
     assertOperationBindingMatches(request, valid);
     assertOperationBindingMatches(request, detachment);
     if (
+      (await this.readCancellation(valid.workspaceId, valid.operationId)) !==
+      undefined
+    ) {
+      throw journalError(
+        "invalidRecord",
+        "A cancelled release operation cannot be claimed.",
+      );
+    }
+    if (
       valid.claimedAt < detachment.detachedAt ||
       valid.claimedAt > request.expiresAt
     ) {
@@ -448,6 +460,70 @@ export class CoordinationJournal {
     }
     assertOperationPathBinding(claim, workspaceId, operationId);
     return claim;
+  }
+
+  public async publishCancellation(
+    cancellation: ReleaseCancellation,
+  ): Promise<void> {
+    const valid = validate(parseReleaseCancellation, cancellation);
+    const request = await this.requireRequest(
+      valid.workspaceId,
+      valid.operationId,
+    );
+    if (
+      valid.requestNonce !== request.requestNonce ||
+      valid.cancelledAt < request.createdAt
+    ) {
+      throw journalError(
+        "invalidRecord",
+        "Release cancellation does not match its request.",
+      );
+    }
+    const session = await this.readSessionDescriptor(valid.cancellingSessionId);
+    const claim = await this.readClaim(valid.workspaceId, valid.operationId);
+    if (
+      (await this.readOutcome(valid.workspaceId, valid.operationId)) !==
+      undefined
+    ) {
+      throw journalError(
+        "invalidRecord",
+        "A terminal release operation cannot be cancelled.",
+      );
+    }
+    const authorized =
+      session !== undefined &&
+      session.bootNonce === valid.cancellingBootNonce &&
+      ((claim === undefined &&
+        session.role === "managed" &&
+        session.sessionId === request.managedSessionId) ||
+        (claim !== undefined &&
+          session.sessionId === claim.claimantSessionId &&
+          session.bootNonce === claim.claimantBootNonce));
+    if (!authorized) {
+      throw journalError(
+        "invalidRecord",
+        "Release cancellation is not authorized by the managed host or exact claimant.",
+      );
+    }
+    await this.publishImmutable(
+      path.join(
+        this.operationDirectory(valid.workspaceId, valid.operationId),
+        "cancelled.json",
+      ),
+      valid,
+    );
+  }
+
+  public async readCancellation(
+    workspaceId: string,
+    operationId: string,
+  ): Promise<ReleaseCancellation | undefined> {
+    return this.readOperationRecord(
+      workspaceId,
+      operationId,
+      "cancelled.json",
+      parseReleaseCancellation,
+    );
   }
 
   public async publishOutcome(outcome: ReleaseOutcome): Promise<void> {

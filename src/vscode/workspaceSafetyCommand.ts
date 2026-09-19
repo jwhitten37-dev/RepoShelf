@@ -4,11 +4,11 @@ import { decideWorkspaceSafety } from "../domain/workspaceSafety.js";
 import type { Logger } from "../infrastructure/logger.js";
 import type { WorkspaceSafetyCollector } from "../infrastructure/workspaceSafety.js";
 import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
-import type { VsCodeWorkspaceRegistry } from "./workspaceRegistry.js";
+import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
 
 export class WorkspaceSafetyCommand {
   public constructor(
-    private readonly registry: VsCodeWorkspaceRegistry,
+    private readonly registry: LoadedWorkspaceRegistry,
     private readonly collector: WorkspaceSafetyCollector,
     private readonly logger: Logger,
   ) {}

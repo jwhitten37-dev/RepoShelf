@@ -18,12 +18,14 @@ import {
   CoordinationRecordError,
   parseDetachmentAcknowledgement,
   parseReleaseClaim,
+  parseReleaseCancellation,
   parseReleaseOutcome,
   parseReleaseRequest,
   parseSessionDescriptor,
   parseSessionLease,
   type DetachmentAcknowledgement,
   type ReleaseClaim,
+  type ReleaseCancellation,
   type ReleaseOutcome,
   type ReleaseRequest,
   type SessionDescriptor,
@@ -120,6 +122,17 @@ const outcome: ReleaseOutcome = {
   diagnosticCode: "CATALOG_REFRESH_FAILED",
 };
 
+const cancellation: ReleaseCancellation = {
+  schemaVersion: 1,
+  recordType: "releaseCancellation",
+  workspaceId: WORKSPACE_ID,
+  operationId: OPERATION_ID,
+  requestNonce: REQUEST_NONCE,
+  cancellingSessionId: MANAGED_ID,
+  cancellingBootNonce: BOOT_NONCE,
+  cancelledAt: 1_500,
+};
+
 afterEach(async () => {
   await Promise.all(
     temporaryRoots
@@ -135,7 +148,31 @@ describe("coordination record validation", () => {
     expect(parseReleaseRequest(request)).toEqual(request);
     expect(parseDetachmentAcknowledgement(detachment)).toEqual(detachment);
     expect(parseReleaseClaim(claim)).toEqual(claim);
+    expect(parseReleaseCancellation(cancellation)).toEqual(cancellation);
     expect(parseReleaseOutcome(outcome)).toEqual(outcome);
+  });
+
+  it("publishes only an exact managed-host pre-claim cancellation", async () => {
+    const journal = await createJournal();
+    const managed: SessionDescriptor = {
+      ...descriptor,
+      sessionId: MANAGED_ID,
+      role: "managed",
+    };
+    await journal.publishSessionDescriptor(managed);
+    await journal.publishRequest(request);
+
+    await journal.publishCancellation(cancellation);
+
+    await expect(
+      journal.readCancellation(WORKSPACE_ID, OPERATION_ID),
+    ).resolves.toEqual(cancellation);
+    await expect(
+      journal.publishCancellation({
+        ...cancellation,
+        operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }),
+    ).rejects.toMatchObject({ code: "invalidRecord" });
   });
 
   it("rejects unknown properties, versions, UUIDs, SHA values, and time order", () => {

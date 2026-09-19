@@ -6,6 +6,17 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CoordinationJournal } from "../src/infrastructure/coordinationJournal.js";
+import { CoordinationProjection } from "../src/infrastructure/coordinationProjection.js";
+import {
+  CoordinatedReleaseExecutor,
+  type CoordinatedReleaseRegistry,
+  type CoordinatedReleaseSafetyService,
+} from "../src/infrastructure/coordinatedRelease.js";
+import type { ManagedWorkspaceRecord } from "../src/domain/models.js";
+import type {
+  DeletionCapability,
+  VerifiedWorkspaceAbsence,
+} from "../src/infrastructure/workspaceRelease.js";
 import type {
   DetachmentAcknowledgement,
   ReleaseClaim,
@@ -84,7 +95,88 @@ describe("independent coordination claim processes", () => {
       journal.readClaim(request.workspaceId, request.operationId),
     ).rejects.toMatchObject({ code: "poisonedClaim" });
   });
+
+  it.each([
+    [false, "interrupted"],
+    [true, "completed"],
+  ] as const)(
+    "recovers a child-created claim with absence=%s without deletion",
+    async (absent, expectedOutcome) => {
+      const { root, journal, request } = await setup(absent ? 31 : 30);
+      const claim = makeClaim(request, uuid(absent ? 301 : 300));
+      await expect(invoke(root, claim)).resolves.toEqual({
+        stdout: "claimed",
+        stderr: "",
+      });
+      await expect(
+        invoke(root, makeClaim(request, uuid(absent ? 401 : 400))),
+      ).resolves.toEqual({ stdout: "alreadyClaimed", stderr: "" });
+      const record = makeRecord(request);
+      const registry = new RecoveryRegistry([record]);
+      const safety = new RecoverySafety();
+      const executor = new CoordinatedReleaseExecutor(
+        journal,
+        new CoordinationProjection(journal),
+        safety,
+        registry,
+        () => 0,
+        () => undefined,
+        () => 200_000,
+        () => 1_000,
+        () => Promise.resolve(absent),
+        () => Promise.resolve(true),
+      );
+
+      const result = await executor.recover({
+        workspaceId: request.workspaceId,
+        operationId: request.operationId,
+      });
+
+      expect(result?.outcome.outcome).toBe(expectedOutcome);
+      expect(safety.deletionCalls).toBe(0);
+      expect(registry.records).toHaveLength(absent ? 0 : 1);
+      await expect(
+        journal.readClaim(request.workspaceId, request.operationId),
+      ).resolves.toEqual(claim);
+    },
+  );
 });
+
+class RecoverySafety implements CoordinatedReleaseSafetyService {
+  public deletionCalls = 0;
+
+  public prepareDeletion(): Promise<DeletionCapability> {
+    throw new Error("Recovery must not mint deletion authority.");
+  }
+
+  public deleteFilesystem(): Promise<VerifiedWorkspaceAbsence> {
+    this.deletionCalls += 1;
+    throw new Error("Recovery must not delete.");
+  }
+
+  public consumeAbsenceProof(): void {
+    throw new Error("Recovery must not consume deletion evidence.");
+  }
+}
+
+class RecoveryRegistry implements CoordinatedReleaseRegistry {
+  public constructor(public records: ManagedWorkspaceRecord[]) {}
+
+  public list(): readonly ManagedWorkspaceRecord[] {
+    return this.records;
+  }
+
+  public removeVerified(record: ManagedWorkspaceRecord): Promise<void> {
+    this.records = this.records.filter(
+      (candidate) => candidate.workspaceId !== record.workspaceId,
+    );
+    return Promise.resolve();
+  }
+
+  public reload(): Promise<void> {
+    return Promise.resolve();
+  }
+}
 
 async function setup(identity = 1): Promise<{
   root: string;
@@ -173,6 +265,26 @@ function binding(request: ReleaseRequest) {
     expectedHeadSha: request.expectedHeadSha,
     coordinatorSessionId: request.coordinatorSessionId,
     managedSessionId: request.managedSessionId,
+  };
+}
+
+function makeRecord(request: ReleaseRequest): ManagedWorkspaceRecord {
+  return {
+    schemaVersion: 1,
+    workspaceId: request.workspaceId,
+    instanceId: request.instanceId,
+    projectId: request.projectId,
+    projectPath: "group/project",
+    canonicalRepositoryUrl: request.canonicalRepositoryUrl,
+    targetBranch: request.targetBranch,
+    pinnedCommitSha: request.expectedHeadSha,
+    cloneMode: "full",
+    sparseDirectories: [],
+    localPath: request.canonicalLocalPath,
+    cloneRoot: request.canonicalCloneRoot,
+    revealPath: undefined,
+    createdAt: new Date(0).toISOString(),
+    lastOpenedAt: new Date(0).toISOString(),
   };
 }
 

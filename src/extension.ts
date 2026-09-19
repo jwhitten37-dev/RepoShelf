@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import { NativeGitRunner } from "./infrastructure/gitRunner.js";
 import { MaterializationService } from "./infrastructure/materialization.js";
+import { AuthoritativeWorkspaceRegistry } from "./infrastructure/authoritativeWorkspaceRegistry.js";
+import { WorkspaceRegistryStore } from "./infrastructure/workspaceRegistryStore.js";
 import { WorkspaceReleaseService } from "./infrastructure/workspaceRelease.js";
 import { WorkspaceSafetyCollector } from "./infrastructure/workspaceSafety.js";
 import { OutputChannelLogger } from "./infrastructure/logger.js";
@@ -37,7 +39,16 @@ export async function activate(
     instances.getTimeoutMs(),
   );
   const refs = new RefStore(context.globalState);
-  const workspaceRegistry = new VsCodeWorkspaceRegistry(context.globalState);
+  const legacyWorkspaceRegistry = new VsCodeWorkspaceRegistry(
+    context.globalState,
+  );
+  const workspaceRegistry = await AuthoritativeWorkspaceRegistry.load(
+    new WorkspaceRegistryStore(
+      context.globalStorageUri.fsPath,
+      legacyWorkspaceRegistry,
+    ),
+    legacyWorkspaceRegistry.list(),
+  );
   const pendingRelease = new PendingReleaseStore(context.globalState);
   let coordination: VsCodeCoordinationLifecycle | undefined;
   try {
@@ -55,6 +66,11 @@ export async function activate(
     );
   }
   const git = new NativeGitRunner();
+  const releaseService = new WorkspaceReleaseService(
+    git,
+    new WorkspaceSafetyCollector(git),
+    workspaceRegistry,
+  );
   const materialization = new MaterializationService(git, workspaceRegistry);
   const workspaceSafety = new WorkspaceSafetyCommand(
     workspaceRegistry,
@@ -64,11 +80,7 @@ export async function activate(
   const catalog = new CatalogTreeProvider(instances, clients, refs, logger);
   const workspaceRelease = new WorkspaceReleaseCommand(
     workspaceRegistry,
-    new WorkspaceReleaseService(
-      git,
-      new WorkspaceSafetyCollector(git),
-      workspaceRegistry,
-    ),
+    releaseService,
     refs,
     catalog,
     logger,
@@ -93,6 +105,9 @@ export async function activate(
       ? undefined
       : (record) => coordination.beforeOpenManagedWorkspace(record),
   );
+  coordination?.enableExecution(releaseService, workspaceRegistry, () => {
+    catalog.refresh();
+  });
 
   context.subscriptions.push(
     output,

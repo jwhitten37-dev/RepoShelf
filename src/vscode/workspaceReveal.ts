@@ -2,10 +2,10 @@ import path from "node:path";
 import { stat } from "node:fs/promises";
 import * as vscode from "vscode";
 import type { Logger } from "../infrastructure/logger.js";
-import type { VsCodeWorkspaceRegistry } from "./workspaceRegistry.js";
+import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
 
 export async function revealManagedSelection(
-  registry: VsCodeWorkspaceRegistry,
+  registry: LoadedWorkspaceRegistry,
   logger: Logger,
 ): Promise<void> {
   const folders = vscode.workspace.workspaceFolders;

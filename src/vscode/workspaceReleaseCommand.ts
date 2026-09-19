@@ -7,7 +7,7 @@ import type { WorkspaceReleaseService } from "../infrastructure/workspaceRelease
 import type { CatalogTreeProvider } from "./catalogTree.js";
 import type { RefStore } from "./refStore.js";
 import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
-import type { VsCodeWorkspaceRegistry } from "./workspaceRegistry.js";
+import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
 import type { PendingReleaseStore } from "./pendingReleaseStore.js";
 import type { PendingReleaseIntent } from "./pendingReleaseStore.js";
 import type { ReleaseOperationKind } from "../infrastructure/coordinationRecords.js";
@@ -20,11 +20,13 @@ export interface WorkspaceReleaseCoordination {
     confirmationAt: number,
   ): Promise<PendingReleaseIntent>;
   acknowledgeDetachment(intent: PendingReleaseIntent): Promise<void>;
+  resumeCoordinatedRelease(intent: PendingReleaseIntent): Promise<void>;
+  cancelPendingRelease(intent: PendingReleaseIntent): Promise<void>;
 }
 
 export class WorkspaceReleaseCommand {
   public constructor(
-    private readonly registry: VsCodeWorkspaceRegistry,
+    private readonly registry: LoadedWorkspaceRegistry,
     private readonly service: WorkspaceReleaseService,
     private readonly refs: RefStore,
     private readonly catalog: CatalogTreeProvider,
@@ -97,30 +99,20 @@ export class WorkspaceReleaseCommand {
         lastVerifiedAt: verified.snapshot.capturedAt,
         ...(push ? { lastPushedCommitSha: verified.snapshot.headSha } : {}),
       });
-      const capability = await this.withProgress(
-        "Performing final release safety checks…",
-        (signal) =>
-          this.service.prepareDeletion(
-            record,
-            verified.snapshot.headSha,
-            countUnsavedWorkspaceBuffers(record.localPath),
-            signal,
-          ),
-      );
       await this.refs.set(
         record.instanceId,
         record.projectId,
         record.targetBranch,
       );
-      void capability;
+      let pendingIntent: PendingReleaseIntent | undefined;
       try {
         if (this.coordination === undefined) {
-          await this.pending.create(
+          pendingIntent = await this.pending.create(
             record.workspaceId,
             verified.snapshot.headSha,
           );
         } else {
-          await this.coordination.createPendingRelease(
+          pendingIntent = await this.coordination.createPendingRelease(
             record,
             verified.snapshot.headSha,
             push ? "pushAndRelease" : "release",
@@ -132,7 +124,7 @@ export class WorkspaceReleaseCommand {
           "Coordination request publication failed; retaining the Phase 4 restart-safe flow",
           error,
         );
-        await this.pending.create(
+        pendingIntent = await this.pending.create(
           record.workspaceId,
           verified.snapshot.headSha,
         );
@@ -141,6 +133,9 @@ export class WorkspaceReleaseCommand {
         await vscode.commands.executeCommand("workbench.action.closeFolder");
       } catch (error) {
         await this.pending.clear();
+        if (this.coordination !== undefined) {
+          await this.coordination.cancelPendingRelease(pendingIntent);
+        }
         throw error;
       }
     } catch (error) {
@@ -164,6 +159,17 @@ export class WorkspaceReleaseCommand {
           "Pending release resumed with a workspace still open; deletion was not attempted.",
         );
       }
+      if (intent.schemaVersion === 2) {
+        if (this.coordination === undefined) {
+          throw new GitLabError(
+            "configuration",
+            "Coordinated release evidence is unavailable; deletion was not attempted.",
+          );
+        }
+        await this.coordination.resumeCoordinatedRelease(intent);
+        return;
+      }
+      await this.registry.reload();
       if (this.coordination !== undefined) {
         try {
           await this.coordination.acknowledgeDetachment(intent);

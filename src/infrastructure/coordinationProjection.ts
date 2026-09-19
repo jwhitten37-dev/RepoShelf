@@ -5,6 +5,7 @@ import type {
 } from "./coordinationJournal.js";
 import type {
   ReleaseClaim,
+  ReleaseCancellation,
   ReleaseOutcome,
   ReleaseRequest,
 } from "./coordinationRecords.js";
@@ -24,6 +25,7 @@ export interface ProjectedOperation extends OperationLocation {
   readonly request?: ReleaseRequest;
   readonly claim?: ReleaseClaim;
   readonly outcome?: ReleaseOutcome;
+  readonly cancellation?: ReleaseCancellation;
   readonly diagnosticCode?:
     "INVALID_OPERATION" | "UNEXPECTED_ARTIFACT" | "DUPLICATE_ACTIVE_OPERATION";
 }
@@ -88,6 +90,10 @@ export class CoordinationProjection {
         location.workspaceId,
         location.operationId,
       );
+      const cancellation = await this.journal.readCancellation(
+        location.workspaceId,
+        location.operationId,
+      );
       const outcome = await this.journal.readOutcome(
         location.workspaceId,
         location.operationId,
@@ -100,7 +106,34 @@ export class CoordinationProjection {
         ) {
           return poisoned(location, "INVALID_OPERATION");
         }
-        return { ...location, request, claim, outcome, state: outcome.outcome };
+        return {
+          ...location,
+          request,
+          claim,
+          outcome,
+          ...(cancellation === undefined ? {} : { cancellation }),
+          state: outcome.outcome,
+        };
+      }
+      if (cancellation !== undefined) {
+        if (claim !== undefined) {
+          if (detachment === undefined) {
+            return poisoned(location, "INVALID_OPERATION");
+          }
+          return {
+            ...location,
+            request,
+            claim,
+            cancellation,
+            state: "claimed",
+          };
+        }
+        return {
+          ...location,
+          request,
+          cancellation,
+          state: "blocked",
+        };
       }
       if (claim !== undefined) {
         if (detachment === undefined) {

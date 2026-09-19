@@ -187,6 +187,17 @@ No outcome claiming deletion is accepted without fresh filesystem absence proof.
 If absence is verified but registry removal or catalog refresh fails, the outcome
 records `deleted` separately from those recoverable reconciliation failures.
 
+### Cancellation
+
+Cancellation is an immutable `cancelled.json` operation artifact bound to the
+request nonce and cancelling session identity. Before claim, only the exact
+managed session may cancel (including a failed close-folder transition). After
+claim, only the exact claimant may cancel. A cancelled unclaimed request cannot
+be claimed. A claimed cancellation remains owned by the sole claimant until it
+publishes a retained outcome or recovery establishes filesystem absence. The
+capability consumer rereads cancellation immediately before native removal; if
+cancellation wins that guard, removal is not called.
+
 ## State machine
 
 ```text
@@ -233,6 +244,13 @@ capability only when all of these hold at the same decision point:
 7. the claimant has no associated dirty text document;
 8. exact post-push remote proof succeeds when required; and
 9. immediate pre-delete revalidation succeeds.
+
+The implementation performs item 9 inside capability consumption, after the
+final ownership/path/Git/remote snapshot and immediately before native removal.
+It reloads the authoritative registry and revalidates exact record equality,
+claimant/session leases, detachment, cancellation, environment/version binding,
+conflicting managed sessions, current-host unsaved buffers, and the monotonic
+processing deadline. Request publication and detachment never mint a capability.
 
 Items 2 and 3 are distributed safety evidence, not a claim that VS Code exposes
 other windows' live buffers. Unknown or unclassified ignored content blocks the

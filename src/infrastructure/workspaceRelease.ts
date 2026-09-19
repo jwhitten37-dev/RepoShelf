@@ -32,6 +32,11 @@ export interface DeletionCapability {
   readonly canonicalPath: string;
 }
 
+export interface VerifiedWorkspaceAbsence {
+  readonly workspaceId: string;
+  readonly canonicalPath: string;
+}
+
 export interface WorkspaceRemover {
   remove(canonicalPath: string): Promise<void>;
   exists(canonicalPath: string): Promise<boolean>;
@@ -41,10 +46,13 @@ interface IssuedCapability extends DeletionCapability {
   readonly record: ManagedWorkspaceRecord;
   readonly headSha: string;
   readonly expiresAt: number;
+  readonly requireExactRemote: boolean;
+  readonly finalAuthorization?: () => Promise<boolean>;
 }
 
 export class WorkspaceReleaseService {
   private readonly capabilities = new WeakSet<object>();
+  private readonly absenceProofs = new WeakSet<object>();
 
   public constructor(
     private readonly git: GitRunner,
@@ -126,6 +134,8 @@ export class WorkspaceReleaseService {
     expectedHeadSha: string,
     unsavedEditorCount: number,
     signal?: AbortSignal,
+    requireExactRemote = false,
+    finalAuthorization?: () => Promise<boolean>,
   ): Promise<DeletionCapability> {
     const registered = this.registry.getByLocalPath(record.localPath);
     if (registered?.workspaceId !== record.workspaceId) {
@@ -148,12 +158,23 @@ export class WorkspaceReleaseService {
         "Local HEAD changed after release confirmation.",
       );
     }
+    if (
+      requireExactRemote &&
+      assessment.snapshot.remoteTargetSha !== assessment.snapshot.headSha
+    ) {
+      throw new GitLabError(
+        "configuration",
+        "The remote target no longer exactly matches local HEAD after push.",
+      );
+    }
     const capability: IssuedCapability = Object.freeze({
       workspaceId: record.workspaceId,
       canonicalPath: assessment.snapshot.topLevel,
       record,
       headSha: assessment.snapshot.headSha,
       expiresAt: this.now() + CAPABILITY_LIFETIME_MS,
+      requireExactRemote,
+      ...(finalAuthorization === undefined ? {} : { finalAuthorization }),
     });
     this.capabilities.add(capability);
     return capability;
@@ -163,6 +184,14 @@ export class WorkspaceReleaseService {
     capability: DeletionCapability,
     unsavedEditorCount: number,
   ): Promise<void> {
+    await this.deleteFilesystem(capability, unsavedEditorCount);
+    await this.registry.remove(capability.workspaceId);
+  }
+
+  public async deleteFilesystem(
+    capability: DeletionCapability,
+    unsavedEditorCount: number,
+  ): Promise<VerifiedWorkspaceAbsence> {
     const issued = capability as IssuedCapability;
     if (!this.capabilities.has(issued)) {
       throw new GitLabError(
@@ -207,6 +236,24 @@ export class WorkspaceReleaseService {
         "Local HEAD changed after deletion safety preparation.",
       );
     }
+    if (
+      issued.requireExactRemote &&
+      finalSnapshot.remoteTargetSha !== finalSnapshot.headSha
+    ) {
+      throw new GitLabError(
+        "configuration",
+        "The remote target changed after post-push deletion safety preparation.",
+      );
+    }
+    if (
+      issued.finalAuthorization !== undefined &&
+      !(await issued.finalAuthorization())
+    ) {
+      throw new GitLabError(
+        "cancelled",
+        "Coordinated release was cancelled before filesystem deletion.",
+      );
+    }
 
     try {
       await this.remover.remove(issued.canonicalPath);
@@ -223,7 +270,29 @@ export class WorkspaceReleaseService {
         "The managed workspace still exists after removal; its registry record was retained.",
       );
     }
-    await this.registry.remove(issued.workspaceId);
+    const proof: VerifiedWorkspaceAbsence = Object.freeze({
+      workspaceId: issued.workspaceId,
+      canonicalPath: issued.canonicalPath,
+    });
+    this.absenceProofs.add(proof);
+    return proof;
+  }
+
+  public consumeAbsenceProof(
+    proof: VerifiedWorkspaceAbsence,
+    expected: ManagedWorkspaceRecord,
+  ): void {
+    if (
+      !this.absenceProofs.has(proof) ||
+      proof.workspaceId !== expected.workspaceId ||
+      proof.canonicalPath !== expected.localPath
+    ) {
+      throw new GitLabError(
+        "configuration",
+        "Registry reconciliation requires fresh verified absence evidence.",
+      );
+    }
+    this.absenceProofs.delete(proof);
   }
 }
 
