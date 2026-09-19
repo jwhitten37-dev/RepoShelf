@@ -108,8 +108,17 @@ export class CoordinationSession {
 
   public async establishFreshLease(): Promise<void> {
     if (this.health === "stopped") throw new Error("Session is stopped.");
-    this.health = "healthy";
     await this.renew(true);
+    this.health = "healthy";
+  }
+
+  public async recoverAfterReconciliation(
+    reconcile: () => Promise<void>,
+  ): Promise<boolean> {
+    if (this.health !== "indeterminate") return false;
+    await reconcile();
+    await this.establishFreshLease();
+    return true;
   }
 
   public createMaterializationHandoff(
@@ -149,18 +158,19 @@ export class CoordinationSession {
         return;
       }
     }
-    this.sequence += 1;
+    const nextSequence = this.sequence + 1;
     const lease: SessionLease = {
       schemaVersion: 1,
       recordType: "sessionLease",
       sessionId: this.descriptor.sessionId,
       bootNonce: this.descriptor.bootNonce,
       role: this.descriptor.role,
-      sequence: this.sequence,
+      sequence: nextSequence,
       observedAt: wallTime,
       expiresAt: wallTime + LEASE_LIFETIME_MS,
     };
     await this.journal.writeLease(lease);
+    this.sequence = nextSequence;
     this.lastWallTime = wallTime;
     this.lastMonotonicTime = monotonicTime;
     this.scheduleRenewal();

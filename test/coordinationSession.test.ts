@@ -66,6 +66,66 @@ describe("CoordinationSession", () => {
     expect(session.leaseHealth).toBe("indeterminate");
   });
 
+  it("requires successful reconciliation before establishing a fresh lease", async () => {
+    const journal = await createJournal();
+    const clock = new FakeClock();
+    const session = makeSession(journal, clock);
+    await session.start();
+    await clock.advance(20_000);
+
+    await expect(
+      session.recoverAfterReconciliation(() =>
+        Promise.reject(new Error("reconciliation failed")),
+      ),
+    ).rejects.toThrow("reconciliation failed");
+    expect(session.leaseHealth).toBe("indeterminate");
+    await expect(journal.readLease(SESSION_ID)).resolves.toMatchObject({
+      sequence: 1,
+    });
+
+    const originalWriteLease = journal.writeLease.bind(journal);
+    journal.writeLease = () => Promise.reject(new Error("lease write failed"));
+    await expect(
+      session.recoverAfterReconciliation(() => Promise.resolve()),
+    ).rejects.toThrow("lease write failed");
+    expect(session.leaseHealth).toBe("indeterminate");
+    journal.writeLease = originalWriteLease;
+
+    let leaseDuringReconciliation;
+    await expect(
+      session.recoverAfterReconciliation(async () => {
+        leaseDuringReconciliation = await journal.readLease(SESSION_ID);
+      }),
+    ).resolves.toBe(true);
+    expect(leaseDuringReconciliation).toMatchObject({ sequence: 1 });
+    expect(session.leaseHealth).toBe("healthy");
+    await expect(journal.readLease(SESSION_ID)).resolves.toMatchObject({
+      sequence: 2,
+      observedAt: 21_000,
+      expiresAt: 51_000,
+    });
+  });
+
+  it("does not reconcile or replace a lease that is already healthy", async () => {
+    const journal = await createJournal();
+    const clock = new FakeClock();
+    const session = makeSession(journal, clock);
+    await session.start();
+    let reconciled = false;
+
+    await expect(
+      session.recoverAfterReconciliation(() => {
+        reconciled = true;
+        return Promise.resolve();
+      }),
+    ).resolves.toBe(false);
+
+    expect(reconciled).toBe(false);
+    await expect(journal.readLease(SESSION_ID)).resolves.toMatchObject({
+      sequence: 1,
+    });
+  });
+
   it("stopping a session only stops renewal and creates no release operation", async () => {
     const journal = await createJournal();
     const clock = new FakeClock();

@@ -38,6 +38,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   private constructor(
     private readonly journal: CoordinationJournal,
     private readonly session: CoordinationSession,
+    private readonly registry: LoadedWorkspaceRegistry,
     private readonly pending: PendingReleaseStore,
     private readonly logger: Logger,
     private readonly adoptedHandoff?: MaterializationHandoff,
@@ -106,6 +107,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
     return new VsCodeCoordinationLifecycle(
       journal,
       session,
+      registry,
       pending,
       logger,
       adoptedHandoff,
@@ -237,6 +239,17 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
     if (this.scanning || this.executor === undefined) return;
     this.scanning = true;
     try {
+      if (
+        await this.session.recoverAfterReconciliation(async () => {
+          await this.registry.reload();
+          await this.projection.projectAll();
+        })
+      ) {
+        this.logger.info(
+          `Coordination session ${this.session.descriptor.sessionId} established a fresh lease after reconciliation`,
+        );
+        return;
+      }
       for (const operation of await this.projection.projectAll()) {
         if (operation.state === "claimed") {
           await this.executor.recover(operation);
