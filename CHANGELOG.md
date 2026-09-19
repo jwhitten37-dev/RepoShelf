@@ -20,6 +20,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   recovery behavior.
 - Phase 4.1A coordination protocol, threat/recovery review, and explicit
   per-subphase automated, integration, UX, and native Windows test gates.
+- Phase 4.1B coordination record validators and a fail-closed filesystem journal
+  with immutable publication, bounded reads, session leases, ordered identity
+  binding, and atomic non-stealable claims; runtime coordination remains disabled.
 
 ### Changed
 

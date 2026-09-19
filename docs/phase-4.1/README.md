@@ -2,10 +2,16 @@
 
 ## Status
 
-**Phase 4.1A architecture review ready.** Phase 4 established a safe restart-based
-Windows release path. Phase 4.1 retains that path as a fallback while adding
-cross-window coordination, retained-workspace lifecycle UX, visible release
-actions, reminders, and recovery behavior suitable for production use.
+**Phase 4.1B implementation in progress.** Phase 4 established a safe
+restart-based Windows release path. Phase 4.1 retains that path as a fallback
+while adding cross-window coordination, retained-workspace lifecycle UX, visible
+release actions, reminders, and recovery behavior suitable for production use.
+
+The 4.1B storage substrate now implements strict bounded record parsing,
+no-follow journal setup, immutable publication, atomic lease replacement, ordered
+identity-bound transitions, and non-stealable claims. It is intentionally not
+wired to extension activation or deletion yet; the Phase 4 fallback remains the
+only active release flow until the complete 4.1B gate passes.
 
 This phase must begin with an architecture and threat-model review. A lock,
 lease, heartbeat, journal entry, successful push, elapsed time, or window closure
