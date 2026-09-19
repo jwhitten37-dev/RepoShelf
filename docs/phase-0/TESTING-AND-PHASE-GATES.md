@@ -133,6 +133,29 @@ Every phase must:
   logs.
 - Release never changes/deletes a remote branch and returns to remote browsing.
 
+### Phase 4.1 — coordinated release and workspace UX
+
+- The original catalog window coordinates normal release, while restart-safe
+  fallback succeeds when it is absent, without duplicate processing.
+- Closing either window, coordinator/session crashes, lease expiry, stopped
+  heartbeats, push success, and reminders cannot independently authorize
+  deletion.
+- Push-verified handoff/closure failure retains the checkout and supports fresh
+  release reconciliation.
+- Ordinary managed-window closure retains clean or dirty state, and Edit Locally
+  revalidates and reopens the exact checkout.
+- Multiple workspace journals, claims, reminders, and completions remain isolated
+  under concurrency, replay, duplication, and crash recovery.
+- Ignored generated content and unknown ignored data are distinguished; unknown
+  ignored data blocks release and no process is killed or force-deleted.
+- Source Control/status/dashboard actions rerun normal command-time safety checks.
+- Age reminders are workspace-specific and notification-only; no silent timed
+  deletion exists.
+- Successful release refreshes the affected project/branch and distinguishes a
+  later catalog-refresh failure from deletion failure.
+- The complete disposable native Windows adversarial matrix in the Phase 4.1
+  plan passes.
+
 ### Phase 5 — disk management and quality of life
 
 - The materialized view reconciles registry, marker, filesystem, and Git state;
@@ -143,6 +166,11 @@ Every phase must:
   age or size.
 - Sparse-profile expansion is directory-oriented, validates paths, and
   preserves local work.
+- Existing sparse workspaces can be reopened, expanded with directories, or
+  converted to a full worktree without conflicting allocation or loss of edits,
+  commits, ignored content, or identity.
+- Release and Rematerialize as Full Clone is offered only after complete release
+  proof; closing a sparse workspace alone never frees its allocation.
 - Manual stale-temp cleanup uses the same containment/ownership guardrails.
 
 ### Phase 6 — team-ready hardening for local validation

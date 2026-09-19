@@ -10,9 +10,10 @@ editing and Git tooling are needed. GitLab is the first implemented provider;
 the product identity and architecture remain provider-neutral.
 
 > [!IMPORTANT]
-> RepoShelf is pre-release software. Phase 4 implementation is complete, with
-> native Windows destructive-path validation still required as a release gate.
-> Closing a window never authorizes workspace deletion.
+> RepoShelf is pre-release software. Phase 4 implementation and native Windows
+> happy-path validation are complete. The remaining adversarial gate and planned
+> Phase 4.1 coordinated-release/production-UX hardening are required before
+> production use. Closing a window never authorizes workspace deletion.
 
 ## Current capabilities
 
@@ -34,8 +35,9 @@ the product identity and architecture remain provider-neutral.
 See [PHASED-PLAN.md](./PHASED-PLAN.md) for scope and sequencing. Design and
 security contracts are under [docs/phase-0](./docs/phase-0/README.md), with
 implementation records for [Phase 1](./docs/phase-1/README.md),
-[Phase 2](./docs/phase-2/README.md), [Phase 3](./docs/phase-3/README.md), and
-[Phase 4](./docs/phase-4/README.md).
+[Phase 2](./docs/phase-2/README.md), [Phase 3](./docs/phase-3/README.md),
+[Phase 4](./docs/phase-4/README.md), and planned
+[Phase 4.1](./docs/phase-4.1/README.md).
 
 ## Safety and privacy
 

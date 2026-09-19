@@ -111,6 +111,21 @@ workspace context.
 
 Closing a window is never permission to release a checkout.
 
+Phase 4.1 introduces a preferred catalog-window coordinator without treating
+cross-window state as deletion authority. Each workspace has independent
+coordinator and managed-session identities, leases, immutable release requests,
+atomic claims, and completion records under extension-controlled host storage.
+The managed window performs explicit confirmation and push verification; after
+it closes, one claimant reruns all remote, ownership, path, Git, HEAD, ref,
+unsaved-buffer, ignored-content, and registry checks before minting an in-memory
+deletion capability. The Phase 4 restart-safe empty-host flow remains the
+fallback when no original coordinator is available.
+
+Ordinary managed-window closure retains the checkout and registry record. A later
+Edit Locally action revalidates and reopens that exact workspace. Coordinator
+loss, lease expiry, stopped heartbeats, push success, and window closure permit
+only lifecycle reconciliation, never deletion.
+
 ## Network policy
 
 - API requests may send a PAT only to the exact validated configured GitLab

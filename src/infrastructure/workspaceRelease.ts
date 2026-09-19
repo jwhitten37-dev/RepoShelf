@@ -14,6 +14,8 @@ import type { GitRunner } from "./gitRunner.js";
 import type { WorkspaceSafetyCollector } from "./workspaceSafety.js";
 
 const CAPABILITY_LIFETIME_MS = 30_000;
+const REMOVAL_MAX_RETRIES = 10;
+const REMOVAL_RETRY_DELAY_MS = 500;
 
 export interface ReleaseRegistry {
   getByLocalPath(localPath: string): ManagedWorkspaceRecord | undefined;
@@ -211,7 +213,7 @@ export class WorkspaceReleaseService {
     } catch (error) {
       throw new GitLabError(
         "configuration",
-        "The managed workspace could not be completely removed; its registry record was retained.",
+        `The managed workspace could not be completely removed (${filesystemErrorDetail(error)}); its registry record was retained.`,
         { cause: error },
       );
     }
@@ -230,13 +232,32 @@ class NativeWorkspaceRemover implements WorkspaceRemover {
     await rm(canonicalPath, {
       recursive: true,
       force: false,
-      maxRetries: 2,
+      maxRetries: REMOVAL_MAX_RETRIES,
+      retryDelay: REMOVAL_RETRY_DELAY_MS,
     });
   }
 
   public exists(canonicalPath: string): Promise<boolean> {
     return exists(canonicalPath);
   }
+}
+
+function filesystemErrorDetail(error: unknown): string {
+  if (!isUnknownRecord(error)) return "unknown error";
+  const code = safeErrorField(error.code, /^[A-Z0-9_]+$/u);
+  const syscall = safeErrorField(error.syscall, /^[a-z]+$/u);
+  if (code === undefined && syscall === undefined) return "unknown error";
+  return [code, syscall]
+    .filter((value) => value !== undefined)
+    .join(" during ");
+}
+
+function safeErrorField(value: unknown, pattern: RegExp): string | undefined {
+  return typeof value === "string" && pattern.test(value) ? value : undefined;
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function evidence(

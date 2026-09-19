@@ -18,25 +18,33 @@
 - GitLab-provided names/content to URIs, UI, logs, and filesystem paths.
 - Registry/marker metadata to destructive filesystem operations.
 - Remote browser window to independently running local workspace window.
+- Cross-window operation journals, leases, requests, claims, and completion
+  records to independently running extension hosts.
 
 ## Principal threats and controls
 
-| Threat                             | Required controls                                                                                            |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| PAT disclosure                     | `SecretStorage`; never URL/argv/log/setting/marker/telemetry; redact headers and error bodies                |
-| Credential sent to attacker origin | Exact origin allowlist; validate base URL; strip auth on redirects; reject unexpected cross-origin redirects |
-| TLS bypass/MITM                    | No insecure TLS option; use approved CA/proxy paths; actionable certificate errors                           |
-| Path traversal from GitLab names   | IDs for identity; sanitize display names; reject `..`, separators, roots, reserved names                     |
-| Symlink/junction deletion escape   | Canonical containment plus component no-follow checks immediately before deletion                            |
-| Deleting an unrelated repository   | Versioned marker + registry agreement + remote identity + Git and path validation + confirmation             |
-| Loss of local work                 | Dirty/operation/ref/reachability/unsaved-buffer checks; no force release                                     |
-| Command injection                  | Spawn executable with argument array; no shell; validate options; use `--`; controlled environment           |
-| Credential prompt deadlock         | Non-interactive Git process policy, timeout/cancellation, credential-helper diagnostics                      |
-| Malicious repository content       | Read-only bytes; no automatic execution; VS Code trust model remains in effect for local folders             |
-| Sensitive persistent cache         | No persistent file bytes in Phases 1–5; approval required for Phase 6                                        |
-| Denial of service                  | Pagination bounds, response/file hard limits, timeouts, cancellation, bounded cache, lazy loading            |
-| Log leakage                        | Structured categories, URL/header/token/query redaction, no environment dumps, opt-in diagnostic detail      |
-| Stale authorization                | Treat 401/403 distinctly; clear session capability state; revalidate before protected operations             |
+| Threat                             | Required controls                                                                                             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| PAT disclosure                     | `SecretStorage`; never URL/argv/log/setting/marker/telemetry; redact headers and error bodies                 |
+| Credential sent to attacker origin | Exact origin allowlist; validate base URL; strip auth on redirects; reject unexpected cross-origin redirects  |
+| TLS bypass/MITM                    | No insecure TLS option; use approved CA/proxy paths; actionable certificate errors                            |
+| Path traversal from GitLab names   | IDs for identity; sanitize display names; reject `..`, separators, roots, reserved names                      |
+| Symlink/junction deletion escape   | Canonical containment plus component no-follow checks immediately before deletion                             |
+| Deleting an unrelated repository   | Versioned marker + registry agreement + remote identity + Git and path validation + confirmation              |
+| Loss of local work                 | Dirty/operation/ref/reachability/unsaved-buffer checks; no force release                                      |
+| Command injection                  | Spawn executable with argument array; no shell; validate options; use `--`; controlled environment            |
+| Credential prompt deadlock         | Non-interactive Git process policy, timeout/cancellation, credential-helper diagnostics                       |
+| Malicious repository content       | Read-only bytes; no automatic execution; VS Code trust model remains in effect for local folders              |
+| Sensitive persistent cache         | No persistent file bytes in Phases 1–5; approval required for Phase 6                                         |
+| Denial of service                  | Pagination bounds, response/file hard limits, timeouts, cancellation, bounded cache, lazy loading             |
+| Log leakage                        | Structured categories, URL/header/token/query redaction, no environment dumps, opt-in diagnostic detail       |
+| Stale authorization                | Treat 401/403 distinctly; clear session capability state; revalidate before protected operations              |
+| Forged/replayed release handoff    | Versioned workspace-bound immutable records; random IDs/nonces; expiry; atomic single claim; fresh full proof |
+| Coordinator/session crash          | Leases permit recovery only; no lease/heartbeat/window state grants deletion; retain registry on ambiguity    |
+| Cross-workspace confusion          | Bind every journal/request/claim/capability to exact workspace, path, project, branch, and expected HEAD      |
+| Timer-based loss of work           | Age/inactivity triggers reminders only; no silent timed push/release/deletion; explicit confirmation required |
+| Ignored local data loss            | Ignored is not disposable; inventory/classify conservatively; unknown ignored content blocks release          |
+| External process interference      | Fresh Git/filesystem checks; bounded handle failure; do not kill processes or force deletion                  |
 
 ## Token policy
 

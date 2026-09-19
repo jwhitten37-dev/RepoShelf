@@ -23,6 +23,7 @@ import { revealManagedSelection } from "./vscode/workspaceReveal.js";
 import { VsCodeWorkspaceRegistry } from "./vscode/workspaceRegistry.js";
 import { WorkspaceSafetyCommand } from "./vscode/workspaceSafetyCommand.js";
 import { WorkspaceReleaseCommand } from "./vscode/workspaceReleaseCommand.js";
+import { PendingReleaseStore } from "./vscode/pendingReleaseStore.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -36,6 +37,7 @@ export async function activate(
   );
   const refs = new RefStore(context.globalState);
   const workspaceRegistry = new VsCodeWorkspaceRegistry(context.globalState);
+  const pendingRelease = new PendingReleaseStore(context.globalState);
   const git = new NativeGitRunner();
   const materialization = new MaterializationService(git, workspaceRegistry);
   const workspaceSafety = new WorkspaceSafetyCommand(
@@ -54,6 +56,7 @@ export async function activate(
     refs,
     catalog,
     logger,
+    pendingRelease,
   );
   const remoteFiles = new RemoteFileSystemProvider(
     instances,
@@ -125,6 +128,7 @@ export async function activate(
   );
 
   await commands.updateContext();
+  await workspaceRelease.resumePendingRelease();
   await revealManagedSelection(workspaceRegistry, logger);
   logger.info("RepoShelf activated");
 }

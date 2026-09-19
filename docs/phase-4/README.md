@@ -2,11 +2,17 @@
 
 ## Status
 
-**Implementation complete.** Automated WSL validation passes. Native Windows
-destructive-path validation remains an unpassed release gate and must be
-completed before production release.
+**Implementation complete.** Automated WSL validation and native Windows normal
+Release and end-to-end Push-and-Release happy paths pass. The remaining native
+Windows adversarial matrix and planned Phase 4.1 lifecycle hardening remain
+release gates before production use.
 
 Closing a VS Code window never authorizes deletion.
+
+The current restart-safe empty-host flow is the validated Phase 4 fallback.
+[Phase 4.1](../phase-4.1/README.md) plans the production coordinator UX, retained
+workspace reopening, visible lifecycle actions, reminders, ignored-content
+policy, and complete adversarial gate.
 
 ## Implemented workflows
 
@@ -36,13 +42,20 @@ Closing a VS Code window never authorizes deletion.
 6. For Push and Release, push through native Git/host credential helpers and
    require exact post-push remote SHA equality.
 7. Re-run fresh release checks and require the confirmed HEAD.
-8. Issue a single-use, service-owned deletion capability that expires after 30
-   seconds. Arbitrary paths cannot invoke deletion.
-9. Immediately before removal, revalidate registry, marker, path containment,
-   Git identity/state, HEAD, and unsaved buffers without another network gap.
-10. Recursively remove only the canonical checkout, verify absence, and only then
+8. Persist a single-use, two-minute release intent containing only the workspace
+   identity and confirmed HEAD. The intent is not deletion authority.
+9. Ask VS Code to close the managed folder. Removing the first workspace folder
+   restarts the extension host and releases native Windows workspace handles.
+10. In the restarted empty host, consume the intent before use, recover the exact
+    registry record, re-run fresh remote safety checks, and require the confirmed
+    HEAD again.
+11. Issue a new single-use, service-owned deletion capability that expires after
+    30 seconds. Arbitrary paths and persisted intents cannot invoke deletion.
+12. Immediately before removal, revalidate registry, marker, path containment,
+    Git identity/state, HEAD, and unsaved buffers without another network gap.
+13. Recursively remove only the canonical checkout, verify absence, and only then
     remove the registry record.
-11. Preserve the registry record after partial filesystem failure and report a
+14. Preserve the registry record after partial filesystem failure and report a
     fail-closed diagnostic. No force-delete path exists.
 
 Fetch updates local remote-tracking refs but does not alter local branches or the
@@ -69,7 +82,8 @@ Disposable real-Git tests cover:
 - forged, expired, and reused deletion capabilities;
 - late unsaved buffers and late HEAD changes;
 - partial removal failure with registry retention; and
-- cancellation and non-following disk measurement.
+- cancellation and non-following disk measurement; and
+- one-time, expiring, malformed, and replaced restart-safe release intents.
 
 ## Native Windows release gate
 

@@ -24,6 +24,9 @@ import {
 } from "./pathSafety.js";
 
 const MARKER_RELATIVE_PATH = path.join("reposhelf", "workspace.json");
+const PLACEMENT_ATTEMPTS = 8;
+const PLACEMENT_INITIAL_RETRY_MS = 100;
+const PLACEMENT_MAX_RETRY_MS = 1_000;
 
 export interface WorkspaceRegistry {
   getByLocalPath(localPath: string): ManagedWorkspaceRecord | undefined;
@@ -159,7 +162,11 @@ export class MaterializationService {
         ...record,
         creationNonce: randomUUID(),
       });
-      await rename(paths.temporaryPath, paths.finalPath);
+      await placeWorkspace(
+        paths.temporaryPath,
+        paths.finalPath,
+        request.signal,
+      );
       await rm(paths.temporaryMarkerPath, { force: true });
       try {
         await this.registry.save(record);
@@ -418,6 +425,66 @@ export class MaterializationService {
       // A failed guarded cleanup is intentionally left for later diagnostics.
     }
   }
+}
+
+export async function placeWorkspace(
+  temporaryPath: string,
+  finalPath: string,
+  signal?: AbortSignal,
+  renameDirectory: (
+    source: string,
+    destination: string,
+  ) => Promise<void> = rename,
+  wait: (milliseconds: number, signal?: AbortSignal) => Promise<void> = waitFor,
+): Promise<void> {
+  for (let attempt = 1; attempt <= PLACEMENT_ATTEMPTS; attempt += 1) {
+    throwIfCancelled(signal);
+    try {
+      await renameDirectory(temporaryPath, finalPath);
+      return;
+    } catch (error) {
+      if (!isTransientPlacementError(error) || attempt === PLACEMENT_ATTEMPTS) {
+        throw error;
+      }
+      const delay = Math.min(
+        PLACEMENT_INITIAL_RETRY_MS * 2 ** (attempt - 1),
+        PLACEMENT_MAX_RETRY_MS,
+      );
+      await wait(delay, signal);
+    }
+  }
+}
+
+function isTransientPlacementError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  return error.code === "EPERM" || error.code === "EBUSY";
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted === true) {
+    throw new GitLabError("cancelled", "Workspace materialization cancelled.");
+  }
+}
+
+function waitFor(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  throwIfCancelled(signal);
+  return new Promise((resolve, reject) => {
+    const complete = (): void => {
+      signal?.removeEventListener("abort", cancel);
+      resolve();
+    };
+    const cancel = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
+      reject(
+        new GitLabError("cancelled", "Workspace materialization cancelled."),
+      );
+    };
+    const timer = setTimeout(complete, milliseconds);
+    signal?.addEventListener("abort", cancel, { once: true });
+  });
 }
 
 async function writeJsonExclusive(file: string, value: unknown): Promise<void> {

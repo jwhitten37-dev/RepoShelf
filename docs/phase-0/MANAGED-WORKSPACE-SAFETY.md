@@ -9,6 +9,13 @@
 4. A dirty, ambiguous, unreachable, externally moved, or structurally unsafe
    checkout is not deleted.
 5. There is no force-delete command.
+6. Closing any window, losing a coordinator, stopping a heartbeat, expiring a
+   lease, completing a push, or reaching an age/inactivity threshold never
+   independently authorizes deletion.
+7. Coordination journals, release requests, and reminder state are not deletion
+   capabilities.
+8. Ignored by Git does not mean disposable; ignored local content is classified
+   conservatively and unknown content blocks release.
 
 ## Managed path allocation
 
@@ -111,6 +118,12 @@ A missing upstream is acceptable only when the remote-reachability and
 local-only-ref proofs succeed. Network failure or ambiguous reachability blocks
 release.
 
+Closing a managed workspace without Release preserves its checkout and registry
+record regardless of whether it is clean or contains local work. A later Edit
+Locally action must revalidate ownership, canonical path, Git identity, origin,
+branch, and clone mode before reopening the same checkout. It must never clone
+over or overwrite a retained allocation.
+
 ## Push and Release Local Workspace
 
 Push and Release additionally requires:
@@ -134,13 +147,29 @@ VS Code SCM/native Git first.
 4. Perform push/remote proof when requested.
 5. Revalidate path containment and ownership to reduce time-of-check/time-of-use
    risk.
-6. Close/remove the local workspace from VS Code as needed.
-7. Delete only that checkout, without following links.
-8. Verify absence, then remove its registry entry.
-9. Refresh remote metadata and retain the remote branch context.
+6. Persist an expiring release intent that identifies the workspace and confirmed
+   HEAD but grants no deletion authority.
+7. Close/remove the local workspace from VS Code. If this restarts the extension
+   host, consume the intent and rerun fresh remote, ownership, path, Git, HEAD,
+   ref, registry, and unsaved-buffer checks in the empty restarted host.
+8. Mint a new short-lived in-memory deletion capability only from those fresh
+   checks, then delete only that checkout without following links.
+9. Verify absence, then remove its registry entry.
+10. Refresh remote metadata and retain the remote branch context.
 
 If deletion partially fails, retain/reconstruct the registry record, log the
 remaining canonical path, and offer diagnostics—not force cleanup.
+
+Phase 4.1 may transfer an explicitly confirmed release request to an original
+catalog coordinator. The request is workspace-specific, expiring, single-claim,
+and not deletion authority. After the managed session detaches, the claimant
+reruns every fresh safety proof and mints a new in-memory capability. If push
+verified but handoff or closure fails, the pushed state is retained for
+reconciliation and the local checkout is not deleted.
+
+Workspace-age reminders may offer Review and Release, Close Window while keeping
+the local copy, Keep Open, or Remind Me Later. They never perform unattended
+release. Multiple workspaces have independent coordination and reminder state.
 
 ## Temporary and stale directories
 

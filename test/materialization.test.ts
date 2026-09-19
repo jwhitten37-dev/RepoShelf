@@ -15,6 +15,7 @@ import type { ManagedWorkspaceRecord } from "../src/domain/models.js";
 import { NativeGitRunner } from "../src/infrastructure/gitRunner.js";
 import {
   MaterializationService,
+  placeWorkspace,
   type MaterializationRequest,
   type WorkspaceRegistry,
 } from "../src/infrastructure/materialization.js";
@@ -297,6 +298,97 @@ describe("MaterializationService with disposable local Git remotes", () => {
   }
 });
 
+describe("Windows-safe workspace placement", () => {
+  it("retries transient directory lock errors with bounded backoff", async () => {
+    const errors = [windowsError("EPERM"), windowsError("EBUSY")];
+    const renameCalls: [string, string][] = [];
+    const delays: number[] = [];
+
+    await placeWorkspace(
+      "temporary",
+      "final",
+      undefined,
+      (source, destination) => {
+        renameCalls.push([source, destination]);
+        const error = errors.shift();
+        return error === undefined ? Promise.resolve() : Promise.reject(error);
+      },
+      (milliseconds) => {
+        delays.push(milliseconds);
+        return Promise.resolve();
+      },
+    );
+
+    expect(renameCalls).toEqual([
+      ["temporary", "final"],
+      ["temporary", "final"],
+      ["temporary", "final"],
+    ]);
+    expect(delays).toEqual([100, 200]);
+  });
+
+  it("fails immediately for a non-transient placement error", async () => {
+    let attempts = 0;
+
+    await expect(
+      placeWorkspace(
+        "temporary",
+        "final",
+        undefined,
+        () => {
+          attempts += 1;
+          return Promise.reject(windowsError("EEXIST"));
+        },
+        () => Promise.resolve(),
+      ),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect(attempts).toBe(1);
+  });
+
+  it("stops after eight transient placement attempts", async () => {
+    let attempts = 0;
+    const delays: number[] = [];
+
+    await expect(
+      placeWorkspace(
+        "temporary",
+        "final",
+        undefined,
+        () => {
+          attempts += 1;
+          return Promise.reject(windowsError("EBUSY"));
+        },
+        (milliseconds) => {
+          delays.push(milliseconds);
+          return Promise.resolve();
+        },
+      ),
+    ).rejects.toMatchObject({ code: "EBUSY" });
+    expect(attempts).toBe(8);
+    expect(delays).toEqual([100, 200, 400, 800, 1_000, 1_000, 1_000]);
+  });
+
+  it("honors cancellation between placement attempts", async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+
+    setTimeout(() => {
+      controller.abort();
+    }, 10);
+
+    await expect(
+      placeWorkspace("temporary", "final", controller.signal, () => {
+        attempts += 1;
+        return Promise.reject(windowsError("EPERM"));
+      }),
+    ).rejects.toMatchObject({
+      code: "cancelled",
+      message: "Workspace materialization cancelled.",
+    });
+    expect(attempts).toBe(1);
+  });
+});
+
 async function writeFixture(source: string): Promise<void> {
   await mkdir(path.join(source, "src", "service"), { recursive: true });
   await mkdir(path.join(source, "docs"), { recursive: true });
@@ -328,4 +420,10 @@ function isNotFound(error: unknown): boolean {
     "code" in error &&
     error.code === "ENOENT"
   );
+}
+
+function windowsError(code: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`Windows filesystem error: ${code}`), {
+    code,
+  });
 }

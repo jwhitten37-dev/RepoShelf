@@ -23,6 +23,12 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Renamed pre-release commands, settings, URI scheme, storage keys, workspace
   root, and ownership markers from the prototype namespace to `reposhelf`.
+- Added bounded retries for transient Windows directory locks during atomic
+  managed-workspace placement.
+- Extended bounded native removal retries for transient Windows locks and added
+  sanitized filesystem error codes to fail-closed release diagnostics.
+- Changed release to close the managed VS Code folder before deletion and resume
+  through a one-time expiring intent with full post-restart safety revalidation.
 
 ### Security
 

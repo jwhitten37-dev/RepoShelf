@@ -8,6 +8,7 @@ import type { CatalogTreeProvider } from "./catalogTree.js";
 import type { RefStore } from "./refStore.js";
 import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
 import type { VsCodeWorkspaceRegistry } from "./workspaceRegistry.js";
+import type { PendingReleaseStore } from "./pendingReleaseStore.js";
 
 export class WorkspaceReleaseCommand {
   public constructor(
@@ -16,6 +17,7 @@ export class WorkspaceReleaseCommand {
     private readonly refs: RefStore,
     private readonly catalog: CatalogTreeProvider,
     private readonly logger: Logger,
+    private readonly pending: PendingReleaseStore,
   ) {}
 
   public release(): Promise<void> {
@@ -96,6 +98,54 @@ export class WorkspaceReleaseCommand {
         record.projectId,
         record.targetBranch,
       );
+      void capability;
+      await this.pending.create(record.workspaceId, verified.snapshot.headSha);
+      try {
+        await vscode.commands.executeCommand("workbench.action.closeFolder");
+      } catch (error) {
+        await this.pending.clear();
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof GitLabError && error.code === "cancelled") return;
+      this.logger.error("Managed workspace release failed", error);
+      const choice = await vscode.window.showErrorMessage(
+        "Managed workspace release failed closed. Local registry metadata was retained unless deletion completed and was verified.",
+        "Show Output",
+      );
+      if (choice === "Show Output") this.logger.show();
+    }
+  }
+
+  public async resumePendingRelease(): Promise<void> {
+    const intent = await this.pending.consume();
+    if (intent === undefined) return;
+    try {
+      if ((vscode.workspace.workspaceFolders?.length ?? 0) !== 0) {
+        throw new GitLabError(
+          "configuration",
+          "Pending release resumed with a workspace still open; deletion was not attempted.",
+        );
+      }
+      const record = this.registry
+        .list()
+        .find(({ workspaceId }) => workspaceId === intent.workspaceId);
+      if (record === undefined) {
+        throw new GitLabError(
+          "configuration",
+          "The pending managed workspace is no longer registered on this host.",
+        );
+      }
+      const capability = await this.withProgress(
+        "Revalidating and releasing managed workspace…",
+        (signal) =>
+          this.service.prepareDeletion(
+            record,
+            intent.expectedHeadSha,
+            countUnsavedWorkspaceBuffers(record.localPath),
+            signal,
+          ),
+      );
       await this.service.delete(
         capability,
         countUnsavedWorkspaceBuffers(record.localPath),
@@ -104,15 +154,13 @@ export class WorkspaceReleaseCommand {
         `Released managed workspace ${record.workspaceId}; remote branch was retained`,
       );
       this.catalog.refresh();
-      vscode.workspace.updateWorkspaceFolders(0, 1);
       await vscode.window.showInformationMessage(
         "Local managed workspace released. The remote branch remains available in RepoShelf.",
       );
     } catch (error) {
-      if (error instanceof GitLabError && error.code === "cancelled") return;
-      this.logger.error("Managed workspace release failed", error);
+      this.logger.error("Pending managed workspace release failed", error);
       const choice = await vscode.window.showErrorMessage(
-        "Managed workspace release failed closed. Local registry metadata was retained unless deletion completed and was verified.",
+        "Managed workspace release failed closed after VS Code detached the folder. Local registry metadata was retained unless deletion completed and was verified.",
         "Show Output",
       );
       if (choice === "Show Output") this.logger.show();

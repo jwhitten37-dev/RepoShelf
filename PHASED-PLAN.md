@@ -404,8 +404,10 @@ Git’s sparse-checkout feature materializes a selected subset of tracked files 
 
 ## Phase 4: Commit, push, and local release
 
-**Status:** implementation complete; automated WSL validation passes. Native
-Windows destructive-path validation remains a release gate.
+**Status:** implementation complete; automated WSL validation and native Windows
+normal Release and Push-and-Release happy paths pass. The remaining native
+Windows adversarial matrix and Phase 4.1 lifecycle hardening remain release
+gates.
 
 **Outcome:** users can commit/push their work, then discard only their local working copy while retaining the remote branch for browse-only access.
 
@@ -469,6 +471,63 @@ The primary removal mechanism can simply delete the entire managed checkout afte
 - The extension never force-removes a dirty or unpushed workspace.
 - Cleanup logs explain precisely why a release action was blocked.
 
+## Phase 4.1: Coordinated release and workspace UX
+
+**Outcome:** the original remote-catalog window coordinates the normal release
+lifecycle, retained workspaces reopen safely, and production actions/reminders
+improve usability without weakening Phase 4 deletion safeguards.
+
+The authoritative architecture, failure cases, subphases, and native Windows
+gate are in [`docs/phase-4.1/README.md`](./docs/phase-4.1/README.md).
+
+### Deliverables
+
+- A workspace-scoped, versioned cross-window operation journal with coordinator
+  and managed-session identities, expiring leases, immutable requests, atomic
+  claims, completion records, replay prevention, and crash recovery.
+- Window 1 as the preferred release coordinator after window 2 explicitly
+  confirms, pushes, verifies, hands off, and closes.
+- The restart-safe empty-host Phase 4 flow as fallback when the original
+  coordinator is unavailable.
+- Reopen retained managed workspaces after an ordinary window close; closing a
+  window never releases, deletes, or frees its allocation.
+- Strict separation among **Close Window, Keep Local Copy**, **Reopen**,
+  **Release**, and Phase 5 **Expand** operations.
+- Workspace-specific isolation for multiple concurrent managed workspaces.
+- Fail-closed handling when push verifies but handoff or window closure fails.
+- Conservative ignored-content inventory: ignored does not mean disposable;
+  unknown ignored content blocks release pending review.
+- Source Control actions, status-bar lifecycle actions, managed-workspace
+  dashboard/status, and clear blocked/recovery diagnostics.
+- Workspace-age reminders with **Review and Release**, **Close Window, Keep Local
+  Copy**, **Keep Open**, and **Remind Me Later**. Timers never silently push,
+  release, or delete.
+- Post-release project/ref cache invalidation, branch reselection, and catalog
+  refresh, with refresh failure reported separately from successful deletion.
+
+### Safety constraints
+
+- Push success, window closure, coordinator loss, stopped heartbeat, lease
+  expiry, age, inactivity, and operation files are never deletion authority.
+- A coordinator claimant reruns ownership, path, Git, remote, HEAD, ref,
+  unsaved-buffer, ignored-content, and registry checks before minting a new
+  short-lived deletion capability.
+- Duplicate, stale, malformed, conflicting, moved, replaced, linked, or
+  incomplete state retains the checkout and registry record.
+- External terminals, installs, builds, watchers, servers, and file handles may
+  block release but are never killed or bypassed with force deletion.
+
+### Acceptance criteria
+
+- The normal two-window flow ends in the original refreshed catalog without a
+  redundant empty window; restart-safe fallback remains available.
+- Coordinator/managed-window closure and crash scenarios cannot delete work
+  without explicit confirmation and fresh proof.
+- Retained clean or dirty workspaces reopen with their local state intact.
+- Multiple workspaces and requests cannot cross-authorize one another.
+- Reminders and ignored-content handling cannot silently discard local data.
+- The Phase 4.1 native Windows adversarial matrix passes using disposable data.
+
 ## Phase 5: Disk management and quality-of-life features
 
 **Outcome:** the extension becomes useful as a VDI disk-pressure tool rather than only a GitLab browser.
@@ -496,6 +555,15 @@ The primary removal mechanism can simply delete the entire managed checkout afte
 - Command to expand sparse checkout paths:
   - `Add folder to local workspace`
   - `Switch sparse profile`
+- Revalidate and expand an existing sparse workspace rather than creating a
+  conflicting second allocation:
+  - `Reopen Workspace`
+  - `Expand Workspace` with additional cone-mode directories
+  - convert the existing sparse checkout to a full worktree
+  - `Release and Rematerialize as Full Clone` only after full release safety
+  - `Cancel`
+- Preserve edits, commits, ignored content, branch/ref state, marker identity,
+  and registry identity during expansion; detect and block checkout conflicts.
 - Safe manual cleanup of stale incomplete clone directories.
 
 ### Useful dashboard model
@@ -513,7 +581,10 @@ Locally Materialized
             [Release local workspace]
 ```
 
-The extension should **recommend** cleanup based on state and disk size, but should not silently delete workspaces based solely on age.
+The extension should **recommend** cleanup based on state and disk size, but
+should not silently delete workspaces based solely on age. Phase 4.1 owns
+workspace-age reminders; Phase 5 may surface the same non-destructive status in
+the disk dashboard.
 
 ## Phase 6: Team-ready hardening
 
@@ -585,8 +656,11 @@ If you are implementing this yourself, the highest-value sequence is:
 3. Hierarchical virtual repository tree with lazy loading.
 4. Partial+sparse local materialization from a remote file/folder.
 5. Safe push-and-release local workspace flow.
-6. Disk-management dashboard and saved sparse profiles.
-7. OAuth, merge requests, multi-instance support, and team-ready hardening.
-8. Marketplace release readiness.
+6. Coordinated cross-window release, retained-workspace UX, visible actions, and
+   non-destructive reminders.
+7. Disk-management dashboard, saved sparse profiles, and sparse-to-full
+   expansion.
+8. OAuth, merge requests, multi-instance support, and team-ready hardening.
+9. Marketplace release readiness.
 
 That order proves the central value early: **browse any GitLab project and branch without consuming clone space**. It then adds the more complex local Git lifecycle only after the remote viewer, data model, auth, and group/project hierarchy are stable.

@@ -176,8 +176,12 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
   });
 
   it("retains the registry record when filesystem removal fails", async () => {
+    const removalError = Object.assign(new Error("sensitive native detail"), {
+      code: "EBUSY",
+      syscall: "rmdir",
+    });
     const failingRemover: WorkspaceRemover = {
-      remove: () => Promise.reject(new Error("simulated removal failure")),
+      remove: () => Promise.reject(removalError),
       exists: () => Promise.resolve(true),
     };
     const failingService = new WorkspaceReleaseService(
@@ -195,7 +199,44 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     );
 
     await expect(failingService.delete(capability, 0)).rejects.toThrow(
-      "registry record was retained",
+      "EBUSY during rmdir); its registry record was retained",
+    );
+    expect(registry.record).toEqual(record);
+  });
+
+  it("does not expose arbitrary native removal error text", async () => {
+    const failingRemover: WorkspaceRemover = {
+      remove: () => Promise.reject(new Error("sensitive native detail")),
+      exists: () => Promise.resolve(true),
+    };
+    const failingService = new WorkspaceReleaseService(
+      git,
+      new WorkspaceSafetyCollector(git, true),
+      registry,
+      Date.now,
+      failingRemover,
+    );
+    const assessment = await failingService.assessRelease(record, 0);
+    const capability = await failingService.prepareDeletion(
+      record,
+      assessment.snapshot.headSha,
+      0,
+    );
+
+    let failure: Error | undefined;
+    try {
+      await failingService.delete(capability, 0);
+    } catch (error) {
+      failure =
+        error instanceof Error
+          ? error
+          : new Error("unexpected non-Error failure");
+    }
+    if (failure === undefined) throw new Error("Expected removal to fail.");
+    expect(failure.message).toContain("unknown error");
+    expect(failure.message).not.toContain("sensitive native detail");
+    await expect(failingService.delete(capability, 0)).rejects.toThrow(
+      "fresh RepoShelf safety capability",
     );
     expect(registry.record).toEqual(record);
   });
