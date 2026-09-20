@@ -316,9 +316,13 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
         `Coordinated release ${request.operationId} finished as ${result.outcome.outcome}; registry=${result.outcome.registryReconciliation}; catalog=${result.outcome.catalogRefresh}`,
       );
       if (result.outcome.deletionVerified) {
-        await vscode.window.showInformationMessage(
-          "Local managed workspace released. The remote branch remains available in RepoShelf.",
-        );
+        void vscode.window
+          .showInformationMessage(
+            "Local managed workspace released. The remote branch remains available in RepoShelf.",
+          )
+          .then(undefined, (error: unknown) => {
+            this.logger.error("Release completion notification failed", error);
+          });
       }
     } finally {
       this.processing.delete(request.operationId);

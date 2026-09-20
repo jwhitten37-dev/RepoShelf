@@ -19,6 +19,7 @@ import {
   type MaterializationRequest,
   type WorkspaceRegistry,
 } from "../src/infrastructure/materialization.js";
+import { parseManagedWorkspaceRecord } from "../src/infrastructure/workspaceRegistryStore.js";
 
 class MemoryRegistry implements WorkspaceRegistry {
   public readonly records: ManagedWorkspaceRecord[] = [];
@@ -28,6 +29,11 @@ class MemoryRegistry implements WorkspaceRegistry {
   }
 
   public save(record: ManagedWorkspaceRecord): Promise<void> {
+    parseManagedWorkspaceRecord({
+      ...record,
+      canonicalRepositoryUrl:
+        "https://gitlab.example.test/platform/test-project",
+    });
     const index = this.records.findIndex(
       (candidate) => candidate.localPath === record.localPath,
     );
@@ -211,6 +217,7 @@ describe("MaterializationService with disposable local Git remotes", () => {
     const second = await service.materialize(request("full", [], undefined));
     expect(second.reused).toBe(true);
     expect(second.record.workspaceId).toBe(first.record.workspaceId);
+    expect(second.record).not.toHaveProperty("creationNonce");
     expect(registry.records).toHaveLength(1);
   });
 

@@ -523,14 +523,34 @@ function parseRecord(value: unknown): ManagedWorkspaceRecord {
     typeof value.cloneRoot !== "string" ||
     !(typeof value.revealPath === "string" || value.revealPath === undefined) ||
     typeof value.createdAt !== "string" ||
-    typeof value.lastOpenedAt !== "string"
+    typeof value.lastOpenedAt !== "string" ||
+    typeof value.creationNonce !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      value.creationNonce,
+    )
   ) {
     throw new GitLabError(
       "configuration",
       "Managed workspace marker is invalid or unsupported.",
     );
   }
-  return value as unknown as ManagedWorkspaceRecord;
+  return {
+    schemaVersion: 1,
+    workspaceId: value.workspaceId,
+    instanceId: value.instanceId,
+    projectId: value.projectId,
+    projectPath: value.projectPath,
+    canonicalRepositoryUrl: value.canonicalRepositoryUrl,
+    targetBranch: value.targetBranch,
+    pinnedCommitSha: value.pinnedCommitSha,
+    cloneMode: value.cloneMode,
+    sparseDirectories: value.sparseDirectories,
+    localPath: value.localPath,
+    cloneRoot: value.cloneRoot,
+    revealPath: value.revealPath,
+    createdAt: value.createdAt,
+    lastOpenedAt: value.lastOpenedAt,
+  };
 }
 
 function unique(values: readonly string[]): readonly string[] {

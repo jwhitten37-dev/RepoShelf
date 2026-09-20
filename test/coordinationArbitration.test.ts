@@ -144,6 +144,32 @@ describe("CoordinationClaimArbiter", () => {
       journal.readClaim(request.workspaceId, request.operationId),
     ).resolves.toBeUndefined();
   });
+
+  it("starts detached preference after the managed lease expires", async () => {
+    const journal = await setupJournal();
+    const request = makeRequest();
+    const managed = descriptor("managed", MANAGED_ID);
+    await journal.writeLease({
+      schemaVersion: 1,
+      recordType: "sessionLease",
+      sessionId: managed.sessionId,
+      bootNonce: managed.bootNonce,
+      role: managed.role,
+      sequence: 1,
+      observedAt: 1_500,
+      expiresAt: 12_000,
+    });
+    await journal.publishRequest(request);
+    await journal.publishDetachment(makeDetachment(request));
+
+    const arbiter = new CoordinationClaimArbiter(journal, () => 12_001);
+    await expect(
+      arbiter.attemptClaim(request, descriptor("detached", DETACHED_ID)),
+    ).resolves.toBe("coordinatorPreferred");
+    await expect(
+      arbiter.attemptClaim(request, descriptor("coordinator", COORDINATOR_ID)),
+    ).resolves.toBe("claimed");
+  });
 });
 
 async function setupJournal(): Promise<CoordinationJournal> {

@@ -3,6 +3,7 @@ import type {
   ReleaseClaim,
   ReleaseRequest,
   SessionDescriptor,
+  SessionLease,
 } from "./coordinationRecords.js";
 
 const COORDINATOR_PREFERENCE_MS = 5_000;
@@ -58,12 +59,14 @@ export class CoordinationClaimArbiter {
     const managed = await this.journal.readSessionDescriptor(
       request.managedSessionId,
     );
+    const managedLease =
+      managed === undefined ? undefined : await this.matchingLease(managed);
     if (
       managed === undefined ||
       managed.role !== "managed" ||
       managed.environmentFingerprint !== claimant.environmentFingerprint ||
       managed.extensionVersion !== claimant.extensionVersion ||
-      (await this.hasLiveLease(managed, now))
+      isLiveLease(managedLease, now)
     ) {
       return "incompatibleSession";
     }
@@ -79,7 +82,9 @@ export class CoordinationClaimArbiter {
     }
     if (
       claimant.role === "detached" &&
-      now < detachment.detachedAt + COORDINATOR_PREFERENCE_MS &&
+      now <
+        Math.max(detachment.detachedAt, managedLease?.expiresAt ?? 0) +
+          COORDINATOR_PREFERENCE_MS &&
       (await this.hasLiveLease(coordinator, now))
     ) {
       return "coordinatorPreferred";
@@ -102,14 +107,21 @@ export class CoordinationClaimArbiter {
     descriptor: SessionDescriptor,
     now: number,
   ): Promise<boolean> {
-    const lease = await this.journal.readLease(descriptor.sessionId);
-    return (
-      lease !== undefined &&
-      lease.bootNonce === descriptor.bootNonce &&
-      lease.observedAt <= now &&
-      lease.expiresAt >= now
-    );
+    return isLiveLease(await this.matchingLease(descriptor), now);
   }
+
+  private async matchingLease(
+    descriptor: SessionDescriptor,
+  ): Promise<SessionLease | undefined> {
+    const lease = await this.journal.readLease(descriptor.sessionId);
+    return lease?.bootNonce === descriptor.bootNonce ? lease : undefined;
+  }
+}
+
+function isLiveLease(lease: SessionLease | undefined, now: number): boolean {
+  return (
+    lease !== undefined && lease.observedAt <= now && lease.expiresAt >= now
+  );
 }
 
 function sameSession(
