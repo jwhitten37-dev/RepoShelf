@@ -72,7 +72,12 @@ export class WorkspaceReleaseCommand {
       );
       const action = push ? "Push and Release" : "Release";
       const confirmed = await vscode.window.showWarningMessage(
-        confirmationMessage(record, bytes, push),
+        confirmationMessage(
+          record,
+          bytes,
+          push,
+          initial.snapshot.ignoredGeneratedEntryCount,
+        ),
         { modal: true },
         action,
       );
@@ -245,7 +250,10 @@ export class WorkspaceReleaseCommand {
       this.logger.info(`Release blocker ${blocker.code}: ${blocker.message}`);
     }
     const dirty = blockers.some(
-      ({ code }) => code === "dirtyGit" || code === "unsavedEditors",
+      ({ code }) =>
+        code === "dirtyGit" ||
+        code === "ignoredContent" ||
+        code === "unsavedEditors",
     );
     const actions = dirty
       ? (["Open Source Control", "Show Output"] as const)
@@ -283,6 +291,7 @@ function confirmationMessage(
   record: ManagedWorkspaceRecord,
   bytes: number,
   push: boolean,
+  ignoredGeneratedEntryCount: number,
 ): string {
   return [
     `${push ? "Push the committed work, verify it remotely, and release" : "Release"} this local managed workspace?`,
@@ -290,6 +299,9 @@ function confirmationMessage(
     `Branch: ${record.targetBranch}`,
     `Path: ${record.localPath}`,
     `Disk usage: ${formatBytes(bytes)}`,
+    ignoredGeneratedEntryCount === 0
+      ? "Ignored content: none"
+      : `Ignored generated content: ${ignoredGeneratedEntryCount} item(s). These items will be deleted with the local checkout.`,
     "Only the local checkout will be deleted. The remote project and branch will not be deleted.",
   ].join("\n");
 }

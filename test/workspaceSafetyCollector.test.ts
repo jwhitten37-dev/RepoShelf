@@ -86,10 +86,44 @@ describe("WorkspaceSafetyCollector with a disposable Git remote", () => {
 
     expect(snapshot.branch).toBe("main");
     expect(snapshot.statusEntryCount).toBe(0);
+    expect(snapshot.ignoredGeneratedEntryCount).toBe(0);
+    expect(snapshot.ignoredUnclassifiedEntryCount).toBe(0);
     expect(snapshot.operationStates).toEqual([]);
     expect(snapshot.remoteTargetSha).toBe(snapshot.headSha);
     expect(snapshot.headAheadOfRemoteTarget).toBe(0);
     expect(snapshot.localOnlyRefCount).toBe(0);
+  });
+
+  it("separates generated and unclassified ignored content", async () => {
+    await writeFile(
+      path.join(record.localPath, ".git", "info", "exclude"),
+      ["node_modules/", ".env", "*.sqlite", "*.pem", "local-notes/", ""].join(
+        "\n",
+      ),
+    );
+    await mkdir(path.join(record.localPath, "node_modules", "package"), {
+      recursive: true,
+    });
+    await mkdir(path.join(record.localPath, "local-notes"));
+    await Promise.all([
+      writeFile(
+        path.join(record.localPath, "node_modules", "package", "index.js"),
+        "generated\n",
+      ),
+      writeFile(path.join(record.localPath, ".env"), "SECRET=value\n"),
+      writeFile(path.join(record.localPath, "local.sqlite"), "database\n"),
+      writeFile(path.join(record.localPath, "private.pem"), "private key\n"),
+      writeFile(
+        path.join(record.localPath, "local-notes", "todo.txt"),
+        "note\n",
+      ),
+    ]);
+
+    const snapshot = await collector.collect(record);
+
+    expect(snapshot.statusEntryCount).toBe(0);
+    expect(snapshot.ignoredGeneratedEntryCount).toBe(1);
+    expect(snapshot.ignoredUnclassifiedEntryCount).toBe(4);
   });
 
   it("detects dirty state and an ongoing Git operation", async () => {

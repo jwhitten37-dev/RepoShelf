@@ -239,6 +239,17 @@ local data.
 - Repository policy cannot name paths outside the checkout, bypass no-follow
   checks, or silently classify unknown content as disposable.
 
+The initial reviewed generated-path policy classifies ignored leaf entries only
+when they are beneath an exact conventional dependency, cache, coverage, virtual
+environment, or build-output directory name. It includes `node_modules`, package
+manager caches, common compiler/tool caches, `coverage`, `dist`, `build`, and
+`out`. A similarly named file, a generated-looking extension, and every path not
+matched by this fixed extension policy remain unclassified. Git's ignore engine
+enumerates each ignored leaf with NUL delimiters; directory collapsing is not
+used. Only category counts leave the collector. Malformed, truncated, oversized,
+or over-count inventories fail closed, and raw ignored filenames are not logged
+or displayed by RepoShelf.
+
 ## Phase 4.1D: Native Windows adversarial gate
 
 Using only disposable data, validate:

@@ -47,6 +47,7 @@ export class NativeGitRunner implements GitRunner {
       });
       let stdout: Buffer<ArrayBufferLike> = Buffer.alloc(0);
       let stderr: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+      let outputExceededLimit = false;
       let settled = false;
       let terminationError: Error | undefined;
       let killTimer: NodeJS.Timeout | undefined;
@@ -90,10 +91,14 @@ export class NativeGitRunner implements GitRunner {
       options.signal?.addEventListener("abort", abort, { once: true });
 
       child.stdout.on("data", (chunk: Buffer) => {
-        stdout = appendBounded(stdout, chunk);
+        const appended = appendBounded(stdout, chunk);
+        stdout = appended.output;
+        outputExceededLimit ||= appended.exceeded;
       });
       child.stderr.on("data", (chunk: Buffer) => {
-        stderr = appendBounded(stderr, chunk);
+        const appended = appendBounded(stderr, chunk);
+        stderr = appended.output;
+        outputExceededLimit ||= appended.exceeded;
       });
       child.on("error", (error) => {
         finish(
@@ -105,7 +110,14 @@ export class NativeGitRunner implements GitRunner {
       child.on("close", (code, signal) => {
         if (settled) return;
         if (terminationError !== undefined) finish(terminationError);
-        else if (code === 0) finish();
+        else if (outputExceededLimit) {
+          finish(
+            new GitLabError(
+              "server",
+              "Git output exceeded the RepoShelf safety limit.",
+            ),
+          );
+        } else if (code === 0) finish();
         else
           finish(
             new GitLabError(
@@ -123,10 +135,13 @@ export class NativeGitRunner implements GitRunner {
 function appendBounded(
   existing: Buffer<ArrayBufferLike>,
   chunk: Buffer<ArrayBufferLike>,
-): Buffer<ArrayBufferLike> {
-  if (existing.byteLength >= MAX_OUTPUT_BYTES) return existing;
-  return Buffer.concat([
-    existing,
-    chunk.subarray(0, MAX_OUTPUT_BYTES - existing.byteLength),
-  ]);
+): { readonly output: Buffer<ArrayBufferLike>; readonly exceeded: boolean } {
+  const remaining = MAX_OUTPUT_BYTES - existing.byteLength;
+  return {
+    output:
+      remaining <= 0
+        ? existing
+        : Buffer.concat([existing, chunk.subarray(0, remaining)]),
+    exceeded: chunk.byteLength > remaining,
+  };
 }

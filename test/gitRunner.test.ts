@@ -29,4 +29,15 @@ describe("NativeGitRunner", () => {
 
     await expect(operation).rejects.toMatchObject({ code: "cancelled" });
   });
+
+  it("rejects output beyond the bounded capture limit", async () => {
+    const runner = new NativeGitRunner(process.execPath);
+
+    await expect(
+      runner.run([
+        "-e",
+        "process.stdout.write('x'.repeat(2 * 1024 * 1024 + 1))",
+      ]),
+    ).rejects.toThrow("output exceeded");
+  });
 });

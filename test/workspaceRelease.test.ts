@@ -114,6 +114,26 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     expect(after).toBe(before);
   });
 
+  it("blocks release and preserves unclassified ignored content", async () => {
+    const ignoredPath = path.join(record.localPath, ".env");
+    await writeFile(
+      path.join(record.localPath, ".git", "info", "exclude"),
+      ".env\n",
+    );
+    await writeFile(ignoredPath, "SECRET=value\n");
+
+    const assessment = await service.assessRelease(record, 0);
+
+    expect(assessment.decision.blockers.map(({ code }) => code)).toContain(
+      "ignoredContent",
+    );
+    await expect(
+      service.prepareDeletion(record, assessment.snapshot.headSha, 0),
+    ).rejects.toThrow("unclassified ignored item");
+    await expect(access(ignoredPath)).resolves.toBeUndefined();
+    expect(registry.record).toEqual(record);
+  });
+
   it("does not push when another local branch contains unique commits", async () => {
     await git.run(["-C", record.localPath, "switch", "-c", "local-only"]);
     await writeFile(path.join(record.localPath, "unique.txt"), "unique\n");

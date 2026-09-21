@@ -1,6 +1,7 @@
 export type WorkspaceSafetyBlockerCode =
   | "ownership"
   | "dirtyGit"
+  | "ignoredContent"
   | "unsavedEditors"
   | "gitOperation"
   | "branchMismatch"
@@ -21,6 +22,8 @@ export interface GitSafetySnapshot {
   readonly headSha: string;
   readonly originUrl: string;
   readonly statusEntryCount: number;
+  readonly ignoredGeneratedEntryCount: number;
+  readonly ignoredUnclassifiedEntryCount: number;
   readonly operationStates: readonly string[];
   readonly upstream: string | undefined;
   readonly ahead: number | undefined;
@@ -124,6 +127,12 @@ export function decideWorkspaceSafety(
     blockers.push({
       code: "dirtyGit",
       message: `Git reports ${snapshot.statusEntryCount} staged, unstaged, or untracked item(s).`,
+    });
+  }
+  if (snapshot.ignoredUnclassifiedEntryCount > 0) {
+    blockers.push({
+      code: "ignoredContent",
+      message: `Git reports ${snapshot.ignoredUnclassifiedEntryCount} unclassified ignored item(s). Review ignored files and ignore rules, then move, remove, or track valuable local content before release.`,
     });
   }
   if (snapshot.operationStates.length > 0) {

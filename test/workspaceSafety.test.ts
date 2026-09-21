@@ -6,6 +6,7 @@ import {
   decideWorkspaceSafety,
 } from "../src/domain/workspaceSafety.js";
 import {
+  classifyIgnoredContent,
   parseAheadBehind,
   parsePorcelainV2Z,
 } from "../src/infrastructure/workspaceSafety.js";
@@ -81,6 +82,36 @@ describe("workspace safety decision", () => {
     expect(decision.blockers.map(({ code }) => code)).toEqual([
       "headNotRemote",
     ]);
+  });
+
+  it("blocks unclassified ignored content without exposing path details", () => {
+    const decision = decideWorkspaceSafety({
+      ownershipValid: true,
+      unsavedEditorCount: 0,
+      expectedBranch: "main",
+      expectedOriginUrl: "https://gitlab.example.test/group/project",
+      snapshot: { ...safeSnapshot(), ignoredUnclassifiedEntryCount: 4 },
+    });
+
+    expect(decision.blockers).toEqual([
+      {
+        code: "ignoredContent",
+        message:
+          "Git reports 4 unclassified ignored item(s). Review ignored files and ignore rules, then move, remove, or track valuable local content before release.",
+      },
+    ]);
+  });
+
+  it("allows classified generated ignored content", () => {
+    const decision = decideWorkspaceSafety({
+      ownershipValid: true,
+      unsavedEditorCount: 0,
+      expectedBranch: "main",
+      expectedOriginUrl: "https://gitlab.example.test/group/project",
+      snapshot: { ...safeSnapshot(), ignoredGeneratedEntryCount: 12 },
+    });
+
+    expect(decision).toEqual({ safe: true, blockers: [] });
   });
 
   it("allows clean committed work to proceed to push", () => {
@@ -165,6 +196,31 @@ describe("workspace safety Git parsers", () => {
     expect(parseAheadBehind("2\t5")).toEqual({ ahead: 2, behind: 5 });
     expect(() => parseAheadBehind("unknown")).toThrow("invalid ahead/behind");
   });
+
+  it("classifies only ignored leaves beneath reviewed generated directories", () => {
+    expect(
+      classifyIgnoredContent(
+        [
+          "node_modules/package/index.js",
+          ".yarn/cache/archive.zip",
+          "src/__pycache__/module.pyc",
+          "dist/bundle.js",
+          "dist",
+          "build.log",
+          ".env",
+          "private.pem",
+          "local.sqlite",
+          "notes/todo.txt",
+          "",
+        ].join("\0"),
+      ),
+    ).toEqual({ generated: 4, unclassified: 6 });
+  });
+
+  it("rejects incomplete and invalid ignored inventories", () => {
+    expect(() => classifyIgnoredContent(".env")).toThrow("incomplete");
+    expect(() => classifyIgnoredContent("/outside\0")).toThrow("invalid");
+  });
 });
 
 function safeSnapshot(): GitSafetySnapshot {
@@ -178,6 +234,8 @@ function safeSnapshot(): GitSafetySnapshot {
     headSha: "a".repeat(40),
     originUrl: "https://gitlab.example.test/group/project",
     statusEntryCount: 0,
+    ignoredGeneratedEntryCount: 0,
+    ignoredUnclassifiedEntryCount: 0,
     operationStates: [],
     upstream: "refs/remotes/origin/main",
     ahead: 0,

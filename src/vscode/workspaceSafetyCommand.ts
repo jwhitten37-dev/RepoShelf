@@ -53,7 +53,7 @@ export class WorkspaceSafetyCommand {
       this.logDecision(decision.safe, decision.blockers);
       if (decision.safe) {
         await vscode.window.showInformationMessage(
-          "Workspace safety check passed. This read-only check does not release or delete the workspace.",
+          `Workspace safety check passed. ${ignoredContentSummary(snapshot.ignoredGeneratedEntryCount)} This read-only check does not release or delete the workspace.`,
         );
         return;
       }
@@ -88,6 +88,12 @@ export class WorkspaceSafetyCommand {
       this.logger.info(`Safety blocker ${blocker.code}: ${blocker.message}`);
     }
   }
+}
+
+function ignoredContentSummary(generatedEntryCount: number): string {
+  return generatedEntryCount === 0
+    ? "No ignored content was found."
+    : `${generatedEntryCount} ignored generated item(s) will be removed if you explicitly release this workspace.`;
 }
 
 function cancellationToAbortController(

@@ -11,6 +11,33 @@ import {
 } from "./pathSafety.js";
 
 const MARKER_RELATIVE_PATH = path.join("reposhelf", "workspace.json");
+const MAX_IGNORED_INVENTORY_BYTES = 2 * 1024 * 1024;
+const MAX_IGNORED_INVENTORY_ENTRIES = 100_000;
+const GENERATED_DIRECTORY_NAMES = new Set([
+  ".angular",
+  ".cache",
+  ".mypy_cache",
+  ".next",
+  ".npm",
+  ".nuxt",
+  ".nyc_output",
+  ".parcel-cache",
+  ".pnpm-store",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".svelte-kit",
+  ".tox",
+  ".turbo",
+  ".venv",
+  ".vite",
+  "__pycache__",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "out",
+  "venv",
+]);
 const OPERATION_PATHS = new Map([
   ["MERGE_HEAD", "merge"],
   ["rebase-merge", "rebase"],
@@ -58,6 +85,7 @@ export class WorkspaceSafetyCollector {
       branch,
       origin,
       status,
+      ignored,
       refs,
     ] = await Promise.all([
       this.required(checkout, ["rev-parse", "--show-toplevel"], signal),
@@ -77,6 +105,11 @@ export class WorkspaceSafetyCollector {
       this.required(
         checkout,
         ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
+        signal,
+      ),
+      this.required(
+        checkout,
+        ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--"],
         signal,
       ),
       this.required(
@@ -158,6 +191,7 @@ export class WorkspaceSafetyCollector {
       upstream.name,
       signal,
     );
+    const ignoredInventory = classifyIgnoredContent(ignored);
     return {
       schemaVersion: 1,
       capturedAt: new Date().toISOString(),
@@ -168,6 +202,8 @@ export class WorkspaceSafetyCollector {
       headSha: head.toLowerCase(),
       originUrl: normalizedOrigin,
       statusEntryCount: parsePorcelainV2Z(status).length,
+      ignoredGeneratedEntryCount: ignoredInventory.generated,
+      ignoredUnclassifiedEntryCount: ignoredInventory.unclassified,
       operationStates,
       upstream: upstream.name,
       ahead: aheadBehind?.ahead,
@@ -271,6 +307,56 @@ export class WorkspaceSafetyCollector {
       return undefined;
     }
   }
+}
+
+export function classifyIgnoredContent(output: string): {
+  readonly generated: number;
+  readonly unclassified: number;
+} {
+  if (Buffer.byteLength(output, "utf8") >= MAX_IGNORED_INVENTORY_BYTES) {
+    throw new Error("Ignored-content inventory exceeded the safety limit.");
+  }
+  if (output === "") return { generated: 0, unclassified: 0 };
+  if (!output.endsWith("\0")) {
+    throw new Error("Git returned an incomplete ignored-content inventory.");
+  }
+  const entries = output.split("\0");
+  entries.pop();
+  if (entries.length > MAX_IGNORED_INVENTORY_ENTRIES) {
+    throw new Error("Ignored-content inventory exceeded the entry limit.");
+  }
+  let generated = 0;
+  let unclassified = 0;
+  for (const entry of entries) {
+    if (entry === "" || path.isAbsolute(entry) || entry.includes("\0")) {
+      throw new Error("Git returned an invalid ignored-content inventory.");
+    }
+    if (isGeneratedIgnoredPath(entry)) generated += 1;
+    else unclassified += 1;
+  }
+  return { generated, unclassified };
+}
+
+function isGeneratedIgnoredPath(candidate: string): boolean {
+  const components = candidate.split("/");
+  if (components.some((component) => component === "" || component === "..")) {
+    return false;
+  }
+  if (
+    components.some(
+      (component, index) =>
+        index < components.length - 1 &&
+        GENERATED_DIRECTORY_NAMES.has(component),
+    )
+  ) {
+    return true;
+  }
+  return components.some(
+    (component, index) =>
+      component === ".yarn" &&
+      components[index + 1] === "cache" &&
+      index + 1 < components.length - 1,
+  );
 }
 
 export function parsePorcelainV2Z(output: string): readonly string[] {
