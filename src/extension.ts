@@ -27,6 +27,10 @@ import { WorkspaceSafetyCommand } from "./vscode/workspaceSafetyCommand.js";
 import { WorkspaceReleaseCommand } from "./vscode/workspaceReleaseCommand.js";
 import { PendingReleaseStore } from "./vscode/pendingReleaseStore.js";
 import { VsCodeCoordinationLifecycle } from "./vscode/coordinationLifecycle.js";
+import {
+  WorkspaceLifecycleController,
+  type WorkspaceLifecycleNode,
+} from "./vscode/workspaceLifecycle.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -72,6 +76,13 @@ export async function activate(
     workspaceRegistry,
   );
   const materialization = new MaterializationService(git, workspaceRegistry);
+  const workspaceLifecycle = new WorkspaceLifecycleController(
+    workspaceRegistry,
+    materialization,
+    context.extensionUri.fsPath,
+    logger,
+    coordination,
+  );
   const workspaceSafety = new WorkspaceSafetyCommand(
     workspaceRegistry,
     new WorkspaceSafetyCollector(git),
@@ -113,11 +124,16 @@ export async function activate(
     output,
     remoteFiles,
     new RemoteDocumentStatus(),
+    workspaceLifecycle,
     vscode.workspace.registerFileSystemProvider("reposhelffs", remoteFiles, {
       isCaseSensitive: true,
       isReadonly: true,
     }),
     vscode.window.registerTreeDataProvider("reposhelf.catalog", catalog),
+    vscode.window.createTreeView("reposhelf.localWorkspaces", {
+      treeDataProvider: workspaceLifecycle,
+      showCollapseAll: true,
+    }),
     vscode.commands.registerCommand("reposhelf.addInstance", () =>
       commands.addInstance(),
     ),
@@ -147,11 +163,57 @@ export async function activate(
     vscode.commands.registerCommand("reposhelf.checkWorkspaceSafety", () =>
       workspaceSafety.check(),
     ),
-    vscode.commands.registerCommand("reposhelf.releaseWorkspace", () =>
-      workspaceRelease.release(),
+    vscode.commands.registerCommand("reposhelf.releaseWorkspace", async () => {
+      await workspaceRelease.release();
+      await workspaceLifecycle.refresh();
+    }),
+    vscode.commands.registerCommand(
+      "reposhelf.pushAndReleaseWorkspace",
+      async () => {
+        await workspaceRelease.pushAndRelease();
+        await workspaceLifecycle.refresh();
+      },
     ),
-    vscode.commands.registerCommand("reposhelf.pushAndReleaseWorkspace", () =>
-      workspaceRelease.pushAndRelease(),
+    vscode.commands.registerCommand(
+      "reposhelf.showWorkspaceLifecycleActions",
+      () => workspaceLifecycle.showActions(),
+    ),
+    vscode.commands.registerCommand("reposhelf.refreshLocalWorkspaces", () =>
+      workspaceLifecycle.refresh(),
+    ),
+    vscode.commands.registerCommand(
+      "reposhelf.reopenManagedWorkspace",
+      (node: WorkspaceLifecycleNode) => workspaceLifecycle.reopen(node),
+    ),
+    vscode.commands.registerCommand(
+      "reposhelf.showWorkspaceDiagnostics",
+      (node: WorkspaceLifecycleNode) => {
+        workspaceLifecycle.showDiagnostics(node);
+      },
+    ),
+    vscode.commands.registerCommand(
+      "reposhelf.checkManagedWorkspaceSafety",
+      (node: WorkspaceLifecycleNode) =>
+        workspaceLifecycle.runWorkspaceAction(
+          node,
+          "reposhelf.checkWorkspaceSafety",
+        ),
+    ),
+    vscode.commands.registerCommand(
+      "reposhelf.pushAndReleaseManagedWorkspace",
+      (node: WorkspaceLifecycleNode) =>
+        workspaceLifecycle.runWorkspaceAction(
+          node,
+          "reposhelf.pushAndReleaseWorkspace",
+        ),
+    ),
+    vscode.commands.registerCommand(
+      "reposhelf.releaseManagedWorkspace",
+      (node: WorkspaceLifecycleNode) =>
+        workspaceLifecycle.runWorkspaceAction(
+          node,
+          "reposhelf.releaseWorkspace",
+        ),
     ),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("reposhelf.instances")) {
@@ -164,6 +226,7 @@ export async function activate(
 
   await commands.updateContext();
   await workspaceRelease.resumePendingRelease();
+  await workspaceLifecycle.refresh();
   await revealManagedSelection(workspaceRegistry, logger);
   logger.info("RepoShelf activated");
 }

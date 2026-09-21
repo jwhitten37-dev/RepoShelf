@@ -2,10 +2,12 @@
 
 ## Status
 
-**Phase 4.1B implementation in progress.** Phase 4 established a safe
-restart-based Windows release path. Phase 4.1 retains that path as a fallback
-while adding cross-window coordination, retained-workspace lifecycle UX, visible
-release actions, reminders, and recovery behavior suitable for production use.
+**Phase 4.1B complete; Phase 4.1C implementation in progress.** Phase 4
+established a safe restart-based Windows release path. Phase 4.1 retains that
+path as a fallback while adding cross-window coordination, retained-workspace
+lifecycle UX, visible release actions, reminders, and recovery behavior suitable
+for production use. Genuine Windows sleep/resume remains part of the Phase 4.1D
+native-Windows matrix.
 
 The 4.1B storage substrate implements strict bounded record parsing, no-follow
 journal setup, immutable publication, atomic lease replacement, ordered
@@ -29,8 +31,9 @@ arbitration and independent-process crash/race tests are implemented. Phase
 evidence validation, fresh Phase 4 checks, a short-lived in-memory capability,
 and immediate pre-removal revalidation. Recovery never steals a claim or deletes;
 it reconciles metadata only after fresh filesystem absence proof. Legacy schema-v1
-restart intents retain the Phase 4 path. Extension Development Host validation is
-still required before the complete Phase 4.1B gate is closed.
+restart intents retain the Phase 4 path. Extension Development Host Gates 1–7
+and simulated suspend/resume validation are complete. The coordination audit
+trail is retained in `coordination-v1`.
 
 This phase must begin with an architecture and threat-model review. A lock,
 lease, heartbeat, journal entry, successful push, elapsed time, or window closure

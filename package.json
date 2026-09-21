@@ -96,6 +96,48 @@
         "title": "Push and Release Local Workspace",
         "category": "RepoShelf",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "reposhelf.showWorkspaceLifecycleActions",
+        "title": "Show Workspace Lifecycle Actions",
+        "category": "RepoShelf",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "reposhelf.refreshLocalWorkspaces",
+        "title": "Refresh Local Workspaces",
+        "category": "RepoShelf",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "reposhelf.reopenManagedWorkspace",
+        "title": "Reopen Managed Workspace",
+        "category": "RepoShelf",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "reposhelf.showWorkspaceDiagnostics",
+        "title": "Show Workspace Diagnostics",
+        "category": "RepoShelf",
+        "icon": "$(output)"
+      },
+      {
+        "command": "reposhelf.checkManagedWorkspaceSafety",
+        "title": "Check Workspace Safety",
+        "category": "RepoShelf",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "reposhelf.pushAndReleaseManagedWorkspace",
+        "title": "Push and Release Local Workspace",
+        "category": "RepoShelf",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "reposhelf.releaseManagedWorkspace",
+        "title": "Release Local Workspace",
+        "category": "RepoShelf",
+        "icon": "$(trash)"
       }
     ],
     "viewsContainers": {
@@ -112,6 +154,10 @@
         {
           "id": "reposhelf.catalog",
           "name": "Remote Catalog"
+        },
+        {
+          "id": "reposhelf.localWorkspaces",
+          "name": "Local Workspaces"
         }
       ]
     },
@@ -126,11 +172,52 @@
       "commandPalette": [
         {
           "command": "reposhelf.releaseWorkspace",
-          "when": "workspaceFolderCount == 1"
+          "when": "reposhelf.isManagedWorkspace == true"
         },
         {
           "command": "reposhelf.pushAndReleaseWorkspace",
-          "when": "workspaceFolderCount == 1"
+          "when": "reposhelf.isManagedWorkspace == true"
+        },
+        {
+          "command": "reposhelf.checkWorkspaceSafety",
+          "when": "reposhelf.isManagedWorkspace == true"
+        },
+        {
+          "command": "reposhelf.reopenManagedWorkspace",
+          "when": "false"
+        },
+        {
+          "command": "reposhelf.showWorkspaceDiagnostics",
+          "when": "false"
+        },
+        {
+          "command": "reposhelf.checkManagedWorkspaceSafety",
+          "when": "false"
+        },
+        {
+          "command": "reposhelf.pushAndReleaseManagedWorkspace",
+          "when": "false"
+        },
+        {
+          "command": "reposhelf.releaseManagedWorkspace",
+          "when": "false"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "reposhelf.checkWorkspaceSafety",
+          "when": "reposhelf.isManagedWorkspace == true",
+          "group": "navigation@80"
+        },
+        {
+          "command": "reposhelf.pushAndReleaseWorkspace",
+          "when": "reposhelf.isManagedWorkspace == true",
+          "group": "navigation@81"
+        },
+        {
+          "command": "reposhelf.releaseWorkspace",
+          "when": "reposhelf.isManagedWorkspace == true",
+          "group": "navigation@82"
         }
       ],
       "view/title": [
@@ -148,6 +235,11 @@
           "command": "reposhelf.refreshCatalog",
           "when": "view == reposhelf.catalog && reposhelf.hasInstance == true",
           "group": "navigation@3"
+        },
+        {
+          "command": "reposhelf.refreshLocalWorkspaces",
+          "when": "view == reposhelf.localWorkspaces",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -165,6 +257,31 @@
           "command": "reposhelf.editLocally",
           "when": "view == reposhelf.catalog && (viewItem == project || viewItem == remoteFolder || viewItem == remoteFile)",
           "group": "inline@3"
+        },
+        {
+          "command": "reposhelf.reopenManagedWorkspace",
+          "when": "view == reposhelf.localWorkspaces && viewItem == managedWorkspace",
+          "group": "inline@1"
+        },
+        {
+          "command": "reposhelf.showWorkspaceDiagnostics",
+          "when": "view == reposhelf.localWorkspaces && viewItem == managedWorkspace",
+          "group": "inline@2"
+        },
+        {
+          "command": "reposhelf.checkManagedWorkspaceSafety",
+          "when": "view == reposhelf.localWorkspaces && viewItem == managedWorkspace",
+          "group": "reposhelf@1"
+        },
+        {
+          "command": "reposhelf.pushAndReleaseManagedWorkspace",
+          "when": "view == reposhelf.localWorkspaces && viewItem == managedWorkspace",
+          "group": "reposhelf@2"
+        },
+        {
+          "command": "reposhelf.releaseManagedWorkspace",
+          "when": "view == reposhelf.localWorkspaces && viewItem == managedWorkspace",
+          "group": "reposhelf@3"
         }
       ]
     },

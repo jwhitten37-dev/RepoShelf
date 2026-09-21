@@ -4,7 +4,10 @@ import * as vscode from "vscode";
 import type { ManagedWorkspaceRecord } from "../domain/models.js";
 import { CoordinationClaimArbiter } from "../infrastructure/coordinationArbitration.js";
 import { CoordinationJournal } from "../infrastructure/coordinationJournal.js";
-import { CoordinationProjection } from "../infrastructure/coordinationProjection.js";
+import {
+  CoordinationProjection,
+  type ProjectedOperation,
+} from "../infrastructure/coordinationProjection.js";
 import {
   CoordinatedReleaseExecutor,
   type CoordinatedReleaseRegistry,
@@ -30,10 +33,13 @@ import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
 export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   private readonly arbiter: CoordinationClaimArbiter;
   private readonly projection: CoordinationProjection;
+  private readonly operationsChanged = new vscode.EventEmitter<void>();
   private executor: CoordinatedReleaseExecutor | undefined;
   private timer: NodeJS.Timeout | undefined;
   private scanning = false;
   private readonly processing = new Set<string>();
+
+  public readonly onDidChangeOperations = this.operationsChanged.event;
 
   private constructor(
     private readonly journal: CoordinationJournal,
@@ -118,6 +124,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
     if (this.timer !== undefined) clearInterval(this.timer);
     this.timer = undefined;
     this.session.stop();
+    this.operationsChanged.dispose();
   }
 
   public enableExecution(
@@ -139,6 +146,10 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
     );
     void this.scan();
     this.timer = setInterval(() => void this.scan(), 1_000);
+  }
+
+  public projectOperations(): Promise<readonly ProjectedOperation[]> {
+    return this.projection.projectAll();
   }
 
   public async beforeOpenManagedWorkspace(
@@ -187,6 +198,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
     };
     const intent = await this.pending.createCoordinated(request);
     await this.journal.publishRequest(request);
+    this.operationsChanged.fire();
     return intent;
   }
 
@@ -208,6 +220,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       detachedAt: Date.now(),
       consumedIntentId: intent.intentId,
     });
+    this.operationsChanged.fire();
   }
 
   public async resumeCoordinatedRelease(
@@ -233,6 +246,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       cancellingBootNonce: this.session.descriptor.bootNonce,
       cancelledAt: Date.now(),
     });
+    this.operationsChanged.fire();
   }
 
   private async scan(): Promise<void> {
@@ -253,6 +267,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       for (const operation of await this.projection.projectAll()) {
         if (operation.state === "claimed") {
           await this.executor.recover(operation);
+          this.operationsChanged.fire();
           continue;
         }
         if (
@@ -326,6 +341,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       }
     } finally {
       this.processing.delete(request.operationId);
+      this.operationsChanged.fire();
     }
   }
 }
