@@ -357,6 +357,28 @@
           "maximum": 209715200,
           "scope": "machine-overridable",
           "description": "Maximum total size of the in-memory remote file cache."
+        },
+        "reposhelf.reminders.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine-overridable",
+          "description": "Show non-destructive reminders for long-retained managed workspaces. Reminders never push, release, or delete automatically."
+        },
+        "reposhelf.reminders.ageDays": {
+          "type": "number",
+          "default": 7,
+          "minimum": 1,
+          "maximum": 365,
+          "scope": "machine-overridable",
+          "description": "Days since a managed workspace was last opened before RepoShelf may show a reminder."
+        },
+        "reposhelf.reminders.snoozeHours": {
+          "type": "number",
+          "default": 24,
+          "minimum": 1,
+          "maximum": 720,
+          "scope": "machine-overridable",
+          "description": "Hours that Remind Me Later suppresses reminders for the selected workspace."
         }
       }
     }

@@ -31,6 +31,8 @@ import {
   WorkspaceLifecycleController,
   type WorkspaceLifecycleNode,
 } from "./vscode/workspaceLifecycle.js";
+import { WorkspaceReminderService } from "./vscode/workspaceReminderService.js";
+import { WorkspaceReminderStore } from "./vscode/workspaceReminderStore.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -83,6 +85,11 @@ export async function activate(
     logger,
     coordination,
   );
+  const workspaceReminders = new WorkspaceReminderService(
+    workspaceRegistry,
+    new WorkspaceReminderStore(context.globalState),
+    logger,
+  );
   const workspaceSafety = new WorkspaceSafetyCommand(
     workspaceRegistry,
     new WorkspaceSafetyCollector(git),
@@ -125,6 +132,7 @@ export async function activate(
     remoteFiles,
     new RemoteDocumentStatus(),
     workspaceLifecycle,
+    workspaceReminders,
     vscode.workspace.registerFileSystemProvider("reposhelffs", remoteFiles, {
       isCaseSensitive: true,
       isReadonly: true,
@@ -221,6 +229,9 @@ export async function activate(
         remoteFiles.clearCache();
         catalog.refresh();
       }
+      if (event.affectsConfiguration("reposhelf.reminders")) {
+        workspaceReminders.restart();
+      }
     }),
   );
 
@@ -228,6 +239,7 @@ export async function activate(
   await workspaceRelease.resumePendingRelease();
   await workspaceLifecycle.refresh();
   await revealManagedSelection(workspaceRegistry, logger);
+  workspaceReminders.start();
   logger.info("RepoShelf activated");
 }
 

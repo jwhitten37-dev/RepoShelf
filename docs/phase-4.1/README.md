@@ -215,6 +215,15 @@ Suggested settings cover enablement, reminder age, and snooze interval. There is
 no silent timed-release setting in Phase 4.1. Activity evidence is advisory and
 incomplete, so its only effect is reminder timing.
 
+The initial 4.1C reminder slice uses the later of persisted `lastOpenedAt` and
+the current managed-host session start as advisory activity evidence. It stores
+bounded snoozes per workspace ID and suppresses **Keep Open** for the current
+extension-host session. Timer callbacks can request a notification only; they
+cannot invoke Git, release, filesystem removal, or registry mutation. **Review
+and Release** routes to the normal release command and its fresh assessment and
+explicit confirmation, while **Close Window, Keep Local Copy** changes no
+RepoShelf registry or coordination state.
+
 ### Ignored content policy
 
 Before release, distinguish tracked state, untracked non-ignored content, known
