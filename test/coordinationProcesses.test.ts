@@ -78,7 +78,7 @@ describe("independent coordination claim processes", () => {
         journal.readClaim(request.workspaceId, request.operationId),
       ).resolves.toBeDefined();
     }
-  }, 30_000);
+  });
 
   it("does not steal a claim when a worker crashes before publication", async () => {
     const { root, journal, request } = await setup();

@@ -107,7 +107,7 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     expect(result.decision).toEqual({ safe: true, blockers: [] });
     expect(result.snapshot.remoteTargetSha).toBe(result.snapshot.headSha);
     expect(remoteHead).toBe(result.snapshot.headSha);
-  }, 30_000);
+  });
 
   it("does not push dirty work", async () => {
     const before = (

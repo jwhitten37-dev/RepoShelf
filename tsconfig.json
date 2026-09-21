@@ -15,5 +15,10 @@
     "types": ["node", "vscode", "vitest/globals"],
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "eslint.config.mjs"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "eslint.config.mjs",
+    "vitest.config.mts"
+  ]
 }
