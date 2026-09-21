@@ -209,13 +209,15 @@ async function gitForCommit(
   message: string,
 ): Promise<void> {
   const git = new NativeGitRunner();
+  const hooks = path.join(repository, ".git", "reposhelf-empty-hooks");
+  await mkdir(hooks, { recursive: true });
   await git.run([
     "-C",
     repository,
     "-c",
     "commit.gpgSign=false",
     "-c",
-    "core.hooksPath=/dev/null",
+    `core.hooksPath=${hooks}`,
     "commit",
     "-m",
     message,

@@ -231,7 +231,7 @@ describe("WorkspaceRegistryStore", () => {
     const linkedRoot = path.join(root, "linked-root");
     const target = path.join(root, "linked-target");
     await mkdir(target);
-    await symlink(target, linkedRoot, "dir");
+    await symlink(target, linkedRoot, directoryLinkType());
     const linkedStore = new WorkspaceRegistryStore(linkedRoot);
     await expect(linkedStore.initializeFromLegacy([])).rejects.toMatchObject({
       code: "unsafeStorage",
@@ -278,6 +278,10 @@ describe("WorkspaceRegistryStore", () => {
     ).rejects.toMatchObject({ code: "invalidRecord" });
   });
 });
+
+function directoryLinkType(): "dir" | "junction" {
+  return process.platform === "win32" ? "junction" : "dir";
+}
 
 async function createStore(mirror?: WorkspaceRegistryMirror): Promise<{
   root: string;

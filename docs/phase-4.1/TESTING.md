@@ -122,6 +122,11 @@ and assert no push, release, filesystem removal, or registry removal occurs.
 
 ## Phase 4.1D — native Windows adversarial gate
 
+Follow the executable
+[native Windows adversarial runbook](./WINDOWS-ADVERSARIAL-GATE.md). The
+**Windows native gate** workflow supplies the candidate VSIX and automated
+native-runner evidence; it does not replace the interactive matrix.
+
 Build and install the candidate VSIX on native Windows. Use a dedicated temporary
 clone root and disposable GitLab project/branches. For every scenario in the
 [Phase 4.1 plan](./README.md#phase-41d-native-windows-adversarial-gate):

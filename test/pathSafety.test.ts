@@ -54,7 +54,7 @@ describe("managed path safety", () => {
     const target = path.join(root, "target");
     const linked = path.join(root, "linked");
     await mkdir(target);
-    await symlink(target, linked, "dir");
+    await symlink(target, linked, directoryLinkType());
     await expect(
       validateCloneRoot(
         path.join(linked, "managed"),
@@ -87,4 +87,8 @@ async function temporaryRoot(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "reposhelf-path-"));
   temporaryRoots.push(root);
   return root;
+}
+
+function directoryLinkType(): "dir" | "junction" {
+  return process.platform === "win32" ? "junction" : "dir";
 }

@@ -1,0 +1,84 @@
+name: Windows native gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate candidate on native Windows
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run formatting, lint, type checking, and tests
+        run: npm run check
+
+      - name: Build extension bundle
+        run: npm run compile
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Check diff whitespace
+        run: git diff --check
+
+      - name: Package candidate VSIX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = node -p "require('./package.json').version"
+          $vsix = Join-Path $env:RUNNER_TEMP "reposhelf-$version-windows-candidate.vsix"
+          npm exec -- vsce package --out $vsix --no-yarn --pre-release
+          if ($LASTEXITCODE -ne 0) { throw "VSIX packaging failed." }
+
+          $artifact = Join-Path $env:RUNNER_TEMP "reposhelf-windows-native"
+          New-Item -ItemType Directory -Path $artifact -Force | Out-Null
+          Copy-Item $vsix $artifact
+          Get-FileHash -Algorithm SHA256 $vsix |
+            Format-List Algorithm, Hash, Path |
+            Out-File (Join-Path $artifact "vsix-sha256.txt") -Encoding utf8
+
+          $metadata = @(
+            "# RepoShelf Windows native workflow evidence"
+            ""
+            "- Commit: ``$env:GITHUB_SHA``"
+            "- Runner image: ``$env:ImageOS $env:ImageVersion``"
+            "- Windows: ``$([System.Environment]::OSVersion.VersionString)``"
+            "- Architecture: ``$env:PROCESSOR_ARCHITECTURE``"
+            "- Node: ``$(node --version)``"
+            "- npm: ``$(npm --version)``"
+            "- Git: ``$(git --version)``"
+            "- Filesystem: ``$((Get-Volume -DriveLetter ($env:SystemDrive).TrimEnd(':')).FileSystem)``"
+            "- Workflow run: ``$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID``"
+            ""
+            "This artifact proves the portable quality gate and packaging ran on a"
+            "native Windows runner. It does not replace the manual Extension"
+            "Development Host matrix in docs/phase-4.1/WINDOWS-ADVERSARIAL-GATE.md."
+          )
+          $metadata | Out-File (Join-Path $artifact "environment.md") -Encoding utf8
+          "artifact=$artifact" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+        id: package
+
+      - name: Upload native Windows evidence and candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: reposhelf-windows-native-${{ github.sha }}
+          path: ${{ steps.package.outputs.artifact }}
+          if-no-files-found: error
+          retention-days: 30

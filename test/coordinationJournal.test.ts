@@ -543,7 +543,7 @@ describe("CoordinationJournal", () => {
     const target = path.join(root, "target");
     const linked = path.join(root, "linked");
     await mkdir(target);
-    await symlink(target, linked, "dir");
+    await symlink(target, linked, directoryLinkType());
     const journal = new CoordinationJournal(linked);
 
     await expect(journal.initialize()).rejects.toMatchObject({
@@ -551,21 +551,24 @@ describe("CoordinationJournal", () => {
     });
   });
 
-  it("distinguishes an unsafe lease link from an absent malformed lease", async () => {
-    const journal = await createJournal();
-    await journal.publishSessionDescriptor(descriptor);
-    const outside = path.join(await temporaryRoot(), "outside.json");
-    await writeFile(outside, JSON.stringify(lease));
-    await symlink(
-      outside,
-      path.join(journal.root, "sessions", COORDINATOR_ID, "lease.json"),
-      "file",
-    );
+  it.skipIf(process.platform === "win32")(
+    "distinguishes an unsafe lease link from an absent malformed lease",
+    async () => {
+      const journal = await createJournal();
+      await journal.publishSessionDescriptor(descriptor);
+      const outside = path.join(await temporaryRoot(), "outside.json");
+      await writeFile(outside, JSON.stringify(lease));
+      await symlink(
+        outside,
+        path.join(journal.root, "sessions", COORDINATOR_ID, "lease.json"),
+        "file",
+      );
 
-    await expect(journal.readLease(COORDINATOR_ID)).rejects.toMatchObject({
-      code: "unsafeStorage",
-    });
-  });
+      await expect(journal.readLease(COORDINATOR_ID)).rejects.toMatchObject({
+        code: "unsafeStorage",
+      });
+    },
+  );
 
   it("rejects an immutable record with another hard-link name", async () => {
     const journal = await createJournal();
@@ -606,6 +609,10 @@ describe("CoordinationJournal", () => {
     expect(String(failure)).not.toContain("private");
   });
 });
+
+function directoryLinkType(): "dir" | "junction" {
+  return process.platform === "win32" ? "junction" : "dir";
+}
 
 async function createJournal(): Promise<CoordinationJournal> {
   const root = await temporaryRoot();

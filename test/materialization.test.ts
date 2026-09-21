@@ -69,13 +69,15 @@ describe("MaterializationService with disposable local Git remotes", () => {
     ]);
     await writeFixture(source);
     await git.run(["-C", source, "add", "--all"]);
+    const hooks = path.join(root, "empty-hooks");
+    await mkdir(hooks);
     await git.run([
       "-C",
       source,
       "-c",
       "commit.gpgSign=false",
       "-c",
-      "core.hooksPath=/dev/null",
+      `core.hooksPath=${hooks}`,
       "commit",
       "-m",
       "fixture",

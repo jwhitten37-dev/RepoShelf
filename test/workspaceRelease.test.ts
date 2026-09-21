@@ -1,6 +1,13 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { access, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ManagedWorkspaceRecord } from "../src/domain/models.js";
@@ -327,11 +334,12 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     await expect(access(record.localPath)).resolves.toBeUndefined();
   });
 
-  it("measures without following symlinks and supports cancellation", async () => {
-    const outside = path.join(root, "outside-large.txt");
+  it("measures without following linked directories and supports cancellation", async () => {
+    const outside = path.join(root, "outside-large");
     const linked = path.join(record.localPath, "outside-link");
-    await writeFile(outside, "x".repeat(1024 * 1024));
-    await symlink(outside, linked, "file");
+    await mkdir(outside);
+    await writeFile(path.join(outside, "large.txt"), "x".repeat(1024 * 1024));
+    await symlink(outside, linked, directoryLinkType());
 
     const bytes = await service.measureWorkspaceBytes(record);
     expect(bytes).toBeLessThan(1024 * 1024);
@@ -358,15 +366,21 @@ async function configureUser(repository: string): Promise<void> {
 
 async function commit(repository: string, message: string): Promise<void> {
   const git = new NativeGitRunner();
+  const hooks = path.join(repository, ".git", "reposhelf-empty-hooks");
+  await mkdir(hooks, { recursive: true });
   await git.run([
     "-C",
     repository,
     "-c",
     "commit.gpgSign=false",
     "-c",
-    "core.hooksPath=/dev/null",
+    `core.hooksPath=${hooks}`,
     "commit",
     "-m",
     message,
   ]);
+}
+
+function directoryLinkType(): "dir" | "junction" {
+  return process.platform === "win32" ? "junction" : "dir";
 }
