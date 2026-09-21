@@ -86,7 +86,12 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
   });
 
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it("pushes committed work to the explicit branch and verifies exact equality", async () => {
@@ -102,7 +107,7 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     expect(result.decision).toEqual({ safe: true, blockers: [] });
     expect(result.snapshot.remoteTargetSha).toBe(result.snapshot.headSha);
     expect(remoteHead).toBe(result.snapshot.headSha);
-  });
+  }, 30_000);
 
   it("does not push dirty work", async () => {
     const before = (

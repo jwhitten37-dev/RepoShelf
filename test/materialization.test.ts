@@ -91,7 +91,12 @@ describe("MaterializationService with disposable local Git remotes", () => {
   });
 
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it("creates and validates a full checkout with a private marker", async () => {

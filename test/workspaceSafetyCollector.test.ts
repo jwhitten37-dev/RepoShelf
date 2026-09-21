@@ -78,7 +78,12 @@ describe("WorkspaceSafetyCollector with a disposable Git remote", () => {
   });
 
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it("collects a complete clean snapshot", async () => {
