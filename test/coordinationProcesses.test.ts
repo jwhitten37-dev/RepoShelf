@@ -120,7 +120,7 @@ describe("independent coordination claim processes", () => {
         safety,
         registry,
         () => 0,
-        () => undefined,
+        () => Promise.resolve(),
         () => 200_000,
         () => 1_000,
         () => Promise.resolve(absent),

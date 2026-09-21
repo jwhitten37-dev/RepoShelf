@@ -199,6 +199,15 @@ actions.
   automatic closure is allowed only after successful release and when unrelated
   unsaved or untitled content cannot be lost.
 
+The 4.1C completion presenter now distinguishes verified local release from
+provider refresh and registry-reconciliation results. Normal coordinator
+completion remains in the catalog window. A detached fallback host offers
+**Browse Remote** and offers **Close Window** only when no folder, dirty document,
+or untitled document could be lost. Provider refresh resolves the released branch
+before reporting success. Failure is reported as **Local release succeeded;
+remote catalog refresh failed** with an explicit retry; retry never repeats local
+deletion.
+
 ### Workspace-age reminders
 
 Workspace age or observed inactivity may trigger a workspace-specific reminder,
@@ -249,6 +258,11 @@ enumerates each ignored leaf with NUL delimiters; directory collapsing is not
 used. Only category counts leave the collector. Malformed, truncated, oversized,
 or over-count inventories fail closed, and raw ignored filenames are not logged
 or displayed by RepoShelf.
+
+The Local Workspaces dashboard measures each retained checkout without following
+links, limits measurement concurrency, and cancels stale refresh generations.
+Disk usage is presentation evidence only: unavailable measurement is displayed
+separately and never authorizes release or weakens fresh command-time checks.
 
 ## Phase 4.1D: Native Windows adversarial gate
 

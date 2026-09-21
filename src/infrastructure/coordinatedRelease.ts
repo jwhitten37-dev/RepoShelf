@@ -60,7 +60,11 @@ export class CoordinatedReleaseExecutor {
     private readonly release: CoordinatedReleaseSafetyService,
     private readonly registry: CoordinatedReleaseRegistry,
     private readonly countUnsavedBuffers: (canonicalPath: string) => number,
-    private readonly refreshCatalog: () => void,
+    private readonly refreshCatalog: (target: {
+      readonly instanceId: string;
+      readonly projectId: number;
+      readonly targetBranch: string;
+    }) => Promise<void>,
     private readonly now: () => number = Date.now,
     private readonly monotonicNow: () => number = () => performance.now(),
     private readonly isAbsent: (
@@ -164,7 +168,7 @@ export class CoordinatedReleaseExecutor {
           state.request,
           state.claim,
           "failed",
-          this.refreshCatalogSafely(),
+          await this.refreshCatalogSafely(state.request),
           "RECOVERED_ABSENCE",
         );
         return { outcome };
@@ -305,15 +309,24 @@ export class CoordinatedReleaseExecutor {
       request,
       claim,
       registryReconciliation,
-      this.refreshCatalogSafely(),
+      await this.refreshCatalogSafely(record),
       code,
     );
     return { outcome, record };
   }
 
-  private refreshCatalogSafely(): "succeeded" | "failed" {
+  private async refreshCatalogSafely(
+    record: Pick<
+      ManagedWorkspaceRecord,
+      "instanceId" | "projectId" | "targetBranch"
+    >,
+  ): Promise<"succeeded" | "failed"> {
     try {
-      this.refreshCatalog();
+      await this.refreshCatalog({
+        instanceId: record.instanceId,
+        projectId: record.projectId,
+        targetBranch: record.targetBranch,
+      });
       return "succeeded";
     } catch {
       return "failed";

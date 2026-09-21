@@ -4,6 +4,7 @@ import type { ProjectedOperation } from "../infrastructure/coordinationProjectio
 import type { Logger } from "../infrastructure/logger.js";
 import type { MaterializationService } from "../infrastructure/materialization.js";
 import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
+import { diskUsageLabel, type DiskUsagePresentation } from "./formatBytes.js";
 import {
   projectWorkspaceLifecycles,
   type WorkspaceLifecycleItem,
@@ -24,6 +25,13 @@ export interface WorkspaceOperationProjection {
   projectOperations(): Promise<readonly ProjectedOperation[]>;
 }
 
+export interface WorkspaceDiskUsageProvider {
+  measureWorkspaceBytes(
+    record: ManagedWorkspaceRecord,
+    signal?: AbortSignal,
+  ): Promise<number>;
+}
+
 export class WorkspaceLifecycleController implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<
     WorkspaceLifecycleNode | undefined | null | void
@@ -34,6 +42,8 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     90,
   );
   private items: readonly WorkspaceLifecycleItem[] = [];
+  private readonly diskUsage = new Map<string, DiskUsagePresentation>();
+  private measurement: AbortController | undefined;
   private readonly projectionSubscription: vscode.Disposable | undefined;
 
   public readonly onDidChangeTreeData = this.changed.event;
@@ -44,6 +54,7 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     private readonly extensionSourceRoot: string,
     private readonly logger: Logger,
     private readonly projection?: WorkspaceOperationProjection,
+    private readonly diskUsageProvider?: WorkspaceDiskUsageProvider,
   ) {
     this.status.command = "reposhelf.showWorkspaceLifecycleActions";
     this.status.name = "RepoShelf Workspace Lifecycle";
@@ -56,6 +67,7 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     this.status.dispose();
     this.changed.dispose();
     this.projectionSubscription?.dispose();
+    this.measurement?.abort();
   }
 
   public async refresh(): Promise<void> {
@@ -80,6 +92,7 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     await this.updateContext();
     this.updateStatusBar();
     this.changed.fire();
+    this.measureDiskUsage();
   }
 
   public getTreeItem(node: WorkspaceLifecycleNode): vscode.TreeItem {
@@ -106,6 +119,7 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
       `Path: ${record.localPath}`,
       `Clone mode: ${cloneModeLabel(record)}`,
       `Lifecycle: ${stateLabel(state)}`,
+      `Disk usage: ${diskUsageLabel(this.diskUsage.get(record.workspaceId))}`,
     ].join("\n");
     item.iconPath = new vscode.ThemeIcon(stateIcon(state));
     item.contextValue = "managedWorkspace";
@@ -122,6 +136,11 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
       detail("Branch", record.targetBranch, "git-branch"),
       detail("Local path", record.localPath, "folder"),
       detail("Clone mode", cloneModeLabel(record), "repo-clone"),
+      detail(
+        "Disk usage",
+        diskUsageLabel(this.diskUsage.get(record.workspaceId)),
+        "database",
+      ),
       detail("Lifecycle", stateLabel(state), stateIcon(state)),
       ...(operationId === undefined
         ? []
@@ -289,6 +308,44 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     this.status.show();
   }
 
+  private measureDiskUsage(): void {
+    this.measurement?.abort();
+    if (this.diskUsageProvider === undefined) return;
+    const controller = new AbortController();
+    this.measurement = controller;
+    const records = this.items.map(({ record }) => record);
+    const activeIds = new Set(records.map(({ workspaceId }) => workspaceId));
+    for (const workspaceId of this.diskUsage.keys()) {
+      if (!activeIds.has(workspaceId)) this.diskUsage.delete(workspaceId);
+    }
+    for (const record of records) {
+      this.diskUsage.set(record.workspaceId, { state: "measuring" });
+    }
+    this.changed.fire();
+    void runBounded(records, 2, async (record) => {
+      try {
+        const bytes = await this.diskUsageProvider?.measureWorkspaceBytes(
+          record,
+          controller.signal,
+        );
+        if (controller.signal.aborted || bytes === undefined) return;
+        this.diskUsage.set(record.workspaceId, { state: "available", bytes });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        this.diskUsage.set(record.workspaceId, { state: "unavailable" });
+        this.logger.error(
+          `Disk usage measurement unavailable for managed workspace ${record.workspaceId}`,
+          error,
+        );
+      }
+      this.changed.fire();
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        this.logger.error("Managed workspace disk usage refresh failed", error);
+      }
+    });
+  }
+
   private currentItem(): WorkspaceLifecycleItem | undefined {
     const folders = vscode.workspace.workspaceFolders;
     if (folders?.length !== 1) return undefined;
@@ -334,6 +391,23 @@ function cloneModeLabel(record: ManagedWorkspaceRecord): string {
   return record.cloneMode === "full"
     ? "Full worktree"
     : `Partial + sparse (${record.sparseDirectories.length} director${record.sparseDirectories.length === 1 ? "y" : "ies"})`;
+}
+
+async function runBounded<T>(
+  values: readonly T[],
+  concurrency: number,
+  operation: (value: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (next < values.length) {
+        const value = values[next];
+        next += 1;
+        if (value !== undefined) await operation(value);
+      }
+    }),
+  );
 }
 
 function stateLabel(state: WorkspaceLifecycleState): string {

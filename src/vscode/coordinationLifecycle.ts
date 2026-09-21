@@ -19,6 +19,7 @@ import {
 } from "../infrastructure/coordinationSession.js";
 import type {
   MaterializationHandoff,
+  ReleaseOutcome,
   ReleaseOperationKind,
   ReleaseRequest,
 } from "../infrastructure/coordinationRecords.js";
@@ -29,12 +30,18 @@ import type {
 } from "./pendingReleaseStore.js";
 import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
 import { countUnsavedWorkspaceBuffers } from "./workspaceBuffers.js";
+import type {
+  ReleaseCatalogRefresher,
+  ReleasedCatalogTarget,
+} from "./releaseCompletion.js";
+import { ReleaseCompletionPresenter } from "./releaseCompletion.js";
 
 export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   private readonly arbiter: CoordinationClaimArbiter;
   private readonly projection: CoordinationProjection;
   private readonly operationsChanged = new vscode.EventEmitter<void>();
   private executor: CoordinatedReleaseExecutor | undefined;
+  private completionPresenter: ReleaseCompletionPresenter | undefined;
   private timer: NodeJS.Timeout | undefined;
   private scanning = false;
   private readonly processing = new Set<string>();
@@ -130,15 +137,19 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   public enableExecution(
     release: CoordinatedReleaseSafetyService,
     registry: CoordinatedReleaseRegistry,
-    refreshCatalog: () => void,
+    catalog: ReleaseCatalogRefresher,
   ): void {
+    this.completionPresenter = new ReleaseCompletionPresenter(
+      catalog,
+      this.logger,
+    );
     this.executor = new CoordinatedReleaseExecutor(
       this.journal,
       this.projection,
       release,
       registry,
       countUnsavedWorkspaceBuffers,
-      refreshCatalog,
+      (record) => catalog.refreshReleasedBranch(record),
       Date.now,
       () => performance.now(),
       undefined,
@@ -266,7 +277,13 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       }
       for (const operation of await this.projection.projectAll()) {
         if (operation.state === "claimed") {
-          await this.executor.recover(operation);
+          const recovered = await this.executor.recover(operation);
+          if (
+            recovered?.outcome.deletionVerified === true &&
+            operation.request !== undefined
+          ) {
+            await this.presentCompletion(operation.request, recovered.outcome);
+          }
           this.operationsChanged.fire();
           continue;
         }
@@ -331,19 +348,36 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
         `Coordinated release ${request.operationId} finished as ${result.outcome.outcome}; registry=${result.outcome.registryReconciliation}; catalog=${result.outcome.catalogRefresh}`,
       );
       if (result.outcome.deletionVerified) {
-        void vscode.window
-          .showInformationMessage(
-            "Local managed workspace released. The remote branch remains available in RepoShelf.",
-          )
-          .then(undefined, (error: unknown) => {
+        void this.presentCompletion(request, result.outcome).catch(
+          (error: unknown) => {
             this.logger.error("Release completion notification failed", error);
-          });
+          },
+        );
       }
     } finally {
       this.processing.delete(request.operationId);
       this.operationsChanged.fire();
     }
   }
+
+  private async presentCompletion(
+    request: ReleaseRequest,
+    outcome: ReleaseOutcome,
+  ): Promise<void> {
+    await this.completionPresenter?.present(
+      releaseTarget(request),
+      outcome,
+      this.session.descriptor.role === "detached",
+    );
+  }
+}
+
+function releaseTarget(request: ReleaseRequest): ReleasedCatalogTarget {
+  return {
+    instanceId: request.instanceId,
+    projectId: request.projectId,
+    targetBranch: request.targetBranch,
+  };
 }
 
 function currentManagedRecord(

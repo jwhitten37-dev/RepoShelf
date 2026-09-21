@@ -56,6 +56,13 @@ describe("CoordinatedReleaseExecutor", () => {
     expect(fixture.release.deleted).toBe(1);
     expect(fixture.release.requireExactRemote).toBe(false);
     expect(fixture.registry.records).toEqual([]);
+    expect(fixture.catalog.targets).toEqual([
+      {
+        instanceId: fixture.record.instanceId,
+        projectId: fixture.record.projectId,
+        targetBranch: fixture.record.targetBranch,
+      },
+    ]);
   });
 
   it("binds push-and-release to exact post-push proof", async () => {
@@ -64,6 +71,32 @@ describe("CoordinatedReleaseExecutor", () => {
     await fixture.executor.execute(fixture.location, fixture.coordinator);
 
     expect(fixture.release.requireExactRemote).toBe(true);
+  });
+
+  it("awaits provider refresh before publishing the completed outcome", async () => {
+    const fixture = await createFixture();
+    let releaseRefresh: (() => void) | undefined;
+    fixture.catalog.gate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    let settled = false;
+    const execution = fixture.executor
+      .execute(fixture.location, fixture.coordinator)
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+    await waitFor(() => fixture.catalog.targets.length === 1);
+
+    expect(settled).toBe(false);
+    expect(
+      await fixture.journal.readOutcome(WORKSPACE_ID, OPERATION_ID),
+    ).toBeUndefined();
+    releaseRefresh?.();
+
+    await expect(execution).resolves.toMatchObject({
+      outcome: { outcome: "completed", catalogRefresh: "succeeded" },
+    });
   });
 
   it("blocks before capability minting for unsaved buffers or forged claimant", async () => {
@@ -325,14 +358,24 @@ async function createFixture(
   const release = new FakeRelease();
   const registry = new FakeRegistry([record]);
   const absent = { value: false };
-  const catalog = { fail: false };
+  const catalog = {
+    fail: false,
+    gate: Promise.resolve(),
+    targets: [] as {
+      readonly instanceId: string;
+      readonly projectId: number;
+      readonly targetBranch: string;
+    }[],
+  };
   const executor = new CoordinatedReleaseExecutor(
     journal,
     new CoordinationProjection(journal),
     release,
     registry,
     () => unsavedBuffers,
-    () => {
+    async (target) => {
+      catalog.targets.push(target);
+      await catalog.gate;
       if (catalog.fail) throw new Error("catalog failure");
     },
     () => now,
@@ -351,6 +394,15 @@ async function createFixture(
     executor,
     location: { workspaceId: WORKSPACE_ID, operationId: OPERATION_ID },
   };
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline)
+      throw new Error("Timed out waiting for fixture state.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 function descriptor(

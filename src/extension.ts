@@ -84,6 +84,7 @@ export async function activate(
     context.extensionUri.fsPath,
     logger,
     coordination,
+    releaseService,
   );
   const workspaceReminders = new WorkspaceReminderService(
     workspaceRegistry,
@@ -123,9 +124,7 @@ export async function activate(
       ? undefined
       : (record) => coordination.beforeOpenManagedWorkspace(record),
   );
-  coordination?.enableExecution(releaseService, workspaceRegistry, () => {
-    catalog.refresh();
-  });
+  coordination?.enableExecution(releaseService, workspaceRegistry, catalog);
 
   context.subscriptions.push(
     output,

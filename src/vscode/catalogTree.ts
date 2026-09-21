@@ -14,6 +14,7 @@ import type { Logger } from "../infrastructure/logger.js";
 import type { ClientFactory } from "./clientFactory.js";
 import type { InstanceService } from "./instanceService.js";
 import type { RefStore } from "./refStore.js";
+import type { ReleasedCatalogTarget } from "./releaseCompletion.js";
 
 export type ProjectNode = {
   readonly type: "project";
@@ -73,6 +74,36 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
     this.users.clear();
     this.contexts.clear();
     this.changed.fire(node);
+  }
+
+  public async refreshReleasedBranch(
+    target: ReleasedCatalogTarget,
+  ): Promise<void> {
+    try {
+      const instance = this.instances
+        .getInstances()
+        .find(({ instanceId }) => instanceId === target.instanceId);
+      if (instance === undefined || !instance.enabled) {
+        throw new Error(
+          "The released workspace GitLab instance is unavailable.",
+        );
+      }
+      await (
+        await this.clientFactory.create(instance)
+      ).resolveBranch(target.projectId, target.targetBranch);
+      await this.refs.set(
+        target.instanceId,
+        target.projectId,
+        target.targetBranch,
+      );
+      this.refresh();
+    } catch (error) {
+      this.logger.error(
+        `Released branch catalog refresh failed for project ${target.projectId}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   public async searchBranches(

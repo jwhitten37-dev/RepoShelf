@@ -11,6 +11,9 @@ import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
 import type { PendingReleaseStore } from "./pendingReleaseStore.js";
 import type { PendingReleaseIntent } from "./pendingReleaseStore.js";
 import type { ReleaseOperationKind } from "../infrastructure/coordinationRecords.js";
+import { formatBytes } from "./formatBytes.js";
+import { ReleaseCompletionPresenter } from "./releaseCompletion.js";
+import { completedReleaseResult } from "./releaseCompletionProjection.js";
 
 export interface WorkspaceReleaseCoordination {
   createPendingRelease(
@@ -25,6 +28,8 @@ export interface WorkspaceReleaseCoordination {
 }
 
 export class WorkspaceReleaseCommand {
+  private readonly completionPresenter: ReleaseCompletionPresenter;
+
   public constructor(
     private readonly registry: LoadedWorkspaceRegistry,
     private readonly service: WorkspaceReleaseService,
@@ -33,7 +38,9 @@ export class WorkspaceReleaseCommand {
     private readonly logger: Logger,
     private readonly pending: PendingReleaseStore,
     private readonly coordination?: WorkspaceReleaseCoordination,
-  ) {}
+  ) {
+    this.completionPresenter = new ReleaseCompletionPresenter(catalog, logger);
+  }
 
   public release(): Promise<void> {
     return this.run(false);
@@ -211,9 +218,20 @@ export class WorkspaceReleaseCommand {
       this.logger.info(
         `Released managed workspace ${record.workspaceId}; remote branch was retained`,
       );
-      this.catalog.refresh();
-      await vscode.window.showInformationMessage(
-        "Local managed workspace released. The remote branch remains available in RepoShelf.",
+      let catalogRefresh: "succeeded" | "failed" = "succeeded";
+      try {
+        await this.catalog.refreshReleasedBranch(record);
+      } catch (error) {
+        catalogRefresh = "failed";
+        this.logger.error(
+          "Remote catalog refresh failed after successful local release",
+          error,
+        );
+      }
+      await this.completionPresenter.present(
+        record,
+        completedReleaseResult(catalogRefresh),
+        true,
       );
     } catch (error) {
       this.logger.error("Pending managed workspace release failed", error);
@@ -304,17 +322,6 @@ function confirmationMessage(
       : `Ignored generated content: ${ignoredGeneratedEntryCount} item(s). These items will be deleted with the local checkout.`,
     "Only the local checkout will be deleted. The remote project and branch will not be deleted.",
   ].join("\n");
-}
-
-function formatBytes(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 function cancellationToAbortController(
