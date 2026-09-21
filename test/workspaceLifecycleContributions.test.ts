@@ -13,10 +13,18 @@ interface MenuContribution {
 }
 
 interface ExtensionManifest {
+  readonly categories: readonly string[];
   readonly contributes: {
     readonly commands: readonly CommandContribution[];
     readonly views: Readonly<
-      Record<string, readonly { readonly id: string; readonly name: string }[]>
+      Record<
+        string,
+        readonly {
+          readonly id: string;
+          readonly name: string;
+          readonly icon: string;
+        }[]
+      >
     >;
     readonly menus: Readonly<Record<string, readonly MenuContribution[]>>;
   };
@@ -32,6 +40,11 @@ const extensionSource = readFileSync(
 );
 
 describe("Phase 4.1C lifecycle contributions", () => {
+  it("uses current Marketplace categories", () => {
+    expect(manifest.categories).toContain("SCM Providers");
+    expect(manifest.categories).not.toContain("Source Control");
+  });
+
   it("registers every contributed command", () => {
     for (const contribution of manifest.contributes.commands) {
       expect(extensionSource).toContain(`"${contribution.command}"`);
@@ -42,6 +55,12 @@ describe("Phase 4.1C lifecycle contributions", () => {
     expect(manifest.contributes.views.reposhelf).toContainEqual({
       id: "reposhelf.localWorkspaces",
       name: "Local Workspaces",
+      icon: "$(repo)",
+    });
+    expect(manifest.contributes.views.reposhelf).toContainEqual({
+      id: "reposhelf.catalog",
+      name: "Remote Catalog",
+      icon: "$(cloud)",
     });
     expect(extensionSource).toContain(
       'vscode.window.createTreeView("reposhelf.localWorkspaces"',

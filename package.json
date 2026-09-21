@@ -27,7 +27,7 @@
     "workspace"
   ],
   "categories": [
-    "Source Control",
+    "SCM Providers",
     "Other"
   ],
   "keywords": [
@@ -153,11 +153,13 @@
       "reposhelf": [
         {
           "id": "reposhelf.catalog",
-          "name": "Remote Catalog"
+          "name": "Remote Catalog",
+          "icon": "$(cloud)"
         },
         {
           "id": "reposhelf.localWorkspaces",
-          "name": "Local Workspaces"
+          "name": "Local Workspaces",
+          "icon": "$(repo)"
         }
       ]
     },
