@@ -122,9 +122,8 @@ describe("MaterializationService with disposable local Git remotes", () => {
     expect(marker.workspaceId).toBe(result.record.workspaceId);
     expect(marker.localPath).toBe(result.record.localPath);
     expect(
-      await readFile(
+      await readCheckoutText(
         path.join(result.record.localPath, "docs", "guide.md"),
-        "utf8",
       ),
     ).toBe("guide\n");
     expect(
@@ -157,13 +156,12 @@ describe("MaterializationService with disposable local Git remotes", () => {
     );
 
     expect(
-      await readFile(
+      await readCheckoutText(
         path.join(result.record.localPath, "src", "service", "app.txt"),
-        "utf8",
       ),
     ).toBe("app\n");
     expect(
-      await readFile(path.join(result.record.localPath, "README.md"), "utf8"),
+      await readCheckoutText(path.join(result.record.localPath, "README.md")),
     ).toBe("root\n");
     await expect(
       stat(path.join(result.record.localPath, "docs", "guide.md")),
@@ -197,7 +195,7 @@ describe("MaterializationService with disposable local Git remotes", () => {
     );
 
     expect(
-      await readFile(path.join(result.record.localPath, "README.md"), "utf8"),
+      await readCheckoutText(path.join(result.record.localPath, "README.md")),
     ).toBe("root\n");
     await expect(
       stat(path.join(result.record.localPath, "src", "service", "app.txt")),
@@ -306,6 +304,10 @@ describe("MaterializationService with disposable local Git remotes", () => {
     };
   }
 });
+
+async function readCheckoutText(file: string): Promise<string> {
+  return (await readFile(file, "utf8")).replaceAll("\r\n", "\n");
+}
 
 describe("Windows-safe workspace placement", () => {
   it("retries transient directory lock errors with bounded backoff", async () => {
