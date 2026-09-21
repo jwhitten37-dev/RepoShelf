@@ -6,7 +6,6 @@ import {
   open,
   readdir,
   readFile,
-  realpath,
   rename,
   rmdir,
   unlink,
@@ -516,7 +515,7 @@ async function assertExistingAncestorsSecure(candidate: string): Promise<void> {
     try {
       const stat = await lstat(current);
       if (stat.isSymbolicLink() || !stat.isDirectory()) throw unsafeStorage();
-      if (!samePath(await realpath(current), current)) throw unsafeStorage();
+      await assertNoLinkedDirectoryComponents(current);
       return;
     } catch (error) {
       if (error instanceof WorkspaceRegistryStoreError) throw error;
@@ -529,14 +528,32 @@ async function assertExistingAncestorsSecure(candidate: string): Promise<void> {
 
 async function assertSecureDirectory(directory: string): Promise<void> {
   try {
-    const stat = await lstat(directory);
-    if (stat.isSymbolicLink() || !stat.isDirectory()) throw unsafeStorage();
-    if (!samePath(await realpath(directory), path.resolve(directory))) {
-      throw unsafeStorage();
-    }
+    await assertNoLinkedDirectoryComponents(directory);
   } catch (error) {
     if (error instanceof WorkspaceRegistryStoreError) throw error;
     throw unsafeStorage(error);
+  }
+}
+
+async function assertNoLinkedDirectoryComponents(
+  directory: string,
+): Promise<void> {
+  const absolute = path.resolve(directory);
+  const parsed = path.parse(absolute);
+  let current = parsed.root;
+  const rootStat = await lstat(current);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw unsafeStorage();
+  }
+  // Inspect components directly: Windows realpath may expand an ordinary 8.3
+  // alias, so textual canonical-path equality is not a reliable link check.
+  for (const segment of absolute
+    .slice(parsed.root.length)
+    .split(path.sep)
+    .filter(Boolean)) {
+    current = path.join(current, segment);
+    const stat = await lstat(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw unsafeStorage();
   }
 }
 

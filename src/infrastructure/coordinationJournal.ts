@@ -6,7 +6,6 @@ import {
   mkdir,
   open,
   readdir,
-  realpath,
   rename,
   unlink,
 } from "node:fs/promises";
@@ -722,15 +721,9 @@ async function createSecureDirectory(directory: string): Promise<void> {
 async function assertExistingAncestorsSecure(candidate: string): Promise<void> {
   let current = path.resolve(candidate);
   const filesystemRoot = path.parse(current).root;
-  const candidates: string[] = [];
   for (;;) {
-    candidates.push(current);
-    if (current === filesystemRoot) break;
-    current = path.dirname(current);
-  }
-  for (const existingCandidate of candidates) {
     try {
-      await assertSecureDirectory(existingCandidate);
+      await assertSecureDirectory(current);
       return;
     } catch (error) {
       if (
@@ -739,18 +732,33 @@ async function assertExistingAncestorsSecure(candidate: string): Promise<void> {
       ) {
         throw error;
       }
-      if (await exists(existingCandidate)) throw error;
+      if (await exists(current)) throw error;
     }
+    if (current === filesystemRoot) break;
+    current = path.dirname(current);
   }
   throw unsafeStorage();
 }
 
 async function assertSecureDirectory(directory: string): Promise<void> {
   try {
-    const stat = await lstat(directory);
-    if (stat.isSymbolicLink() || !stat.isDirectory()) throw unsafeStorage();
-    const canonical = await realpath(directory);
-    if (!samePath(canonical, path.resolve(directory))) throw unsafeStorage();
+    const absolute = path.resolve(directory);
+    const parsed = path.parse(absolute);
+    let current = parsed.root;
+    const rootStat = await lstat(current);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+      throw unsafeStorage();
+    }
+    // Inspect components directly: Windows realpath may expand an ordinary 8.3
+    // alias, so textual canonical-path equality is not a reliable link check.
+    for (const segment of absolute
+      .slice(parsed.root.length)
+      .split(path.sep)
+      .filter(Boolean)) {
+      current = path.join(current, segment);
+      const stat = await lstat(current);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw unsafeStorage();
+    }
   } catch (error) {
     if (error instanceof CoordinationJournalError) throw error;
     throw unsafeStorage(error);
@@ -902,10 +910,4 @@ async function readBoundedDirectory(
     );
   }
   return entries.sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function samePath(left: string, right: string): boolean {
-  return process.platform === "win32"
-    ? left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0
-    : left === right;
 }
