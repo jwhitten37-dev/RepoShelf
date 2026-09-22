@@ -85,6 +85,7 @@ export async function activate(
     logger,
     coordination,
     releaseService,
+    context.globalState,
   );
   const workspaceReminders = new WorkspaceReminderService(
     workspaceRegistry,
@@ -154,6 +155,12 @@ export async function activate(
         commands.refresh(node);
       },
     ),
+    vscode.commands.registerCommand("reposhelf.searchProjects", () => {
+      void commands.searchProjects();
+    }),
+    vscode.commands.registerCommand("reposhelf.clearProjectSearch", () => {
+      commands.clearProjectSearch();
+    }),
     vscode.commands.registerCommand("reposhelf.selectBranch", (node: unknown) =>
       commands.selectBranch(isProjectNode(node) ? node : undefined),
     ),
@@ -187,6 +194,12 @@ export async function activate(
     ),
     vscode.commands.registerCommand("reposhelf.refreshLocalWorkspaces", () =>
       workspaceLifecycle.refresh(),
+    ),
+    vscode.commands.registerCommand("reposhelf.sortLocalWorkspaces", () =>
+      workspaceLifecycle.selectSort(),
+    ),
+    vscode.commands.registerCommand("reposhelf.filterLocalWorkspaces", () =>
+      workspaceLifecycle.setFilter(),
     ),
     vscode.commands.registerCommand(
       "reposhelf.reopenManagedWorkspace",
@@ -230,6 +243,9 @@ export async function activate(
       }
       if (event.affectsConfiguration("reposhelf.reminders")) {
         workspaceReminders.restart();
+      }
+      if (event.affectsConfiguration("reposhelf.disk")) {
+        void workspaceLifecycle.refresh();
       }
     }),
   );

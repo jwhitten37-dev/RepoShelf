@@ -528,25 +528,74 @@ gate are in [`docs/phase-4.1/README.md`](./docs/phase-4.1/README.md).
 - Reminders and ignored-content handling cannot silently discard local data.
 - The Phase 4.1 native Windows adversarial matrix passes using disposable data.
 
+**Status:** complete and signed off. All W01–W28 native-Windows rows passed
+against workflow VSIX `chiefwizard.reposhelf@0.1.0` from commit `f263b8d`.
+Sanitized sign-off and artifact provenance are retained in
+[`docs/phase-4.1/README.md`](./docs/phase-4.1/README.md); environment-sensitive
+evidence is not committed.
+
 ## Phase 5: Disk management and quality-of-life features
 
 **Outcome:** the extension becomes useful as a VDI disk-pressure tool rather than only a GitLab browser.
 
 ### Deliverables
 
-- **Locally Materialized** virtual view.
+#### Phase 5A — catalog and branch-search quality of life
+
+- Add **Search Projects** to the Remote Catalog title bar. Native Tree Views do
+  not embed arbitrary persistent text fields, so the action opens one persistent
+  `createQuickPick()` session.
+- Search GitLab server-side by project and namespace after a two-character
+  threshold and 300 ms debounce. Cancel stale requests and cap each interactive
+  query at one 100-item page rather than traversing organization-wide pagination.
+- Display busy, no-match, and error states inline without closing the picker.
+- On selection, show the complete current result set as a temporary root-level
+  Remote Catalog search view. **Clear Project Search** and normal catalog refresh
+  return to the hierarchical catalog.
+- Replace the branch `showInputBox()` plus `showQuickPick()` sequence with one
+  persistent, debounced `createQuickPick()` session. Empty and no-match searches
+  remain open; stale requests are cancelled; branch selection retains immutable
+  SHA resolution before repository browsing.
+- Remote branch creation is not part of Phase 5A. The no-match state identifies
+  it as planned for the separately gated Phase 6A remote-write slice.
+
+Phase 5A acceptance requires mocked GitLab query/response tests, cancellation
+propagation, bounded-search proof, command/menu registration tests, and manual
+Extension Development Host validation of keyboard operation, fast typing,
+no-results, errors, selection, clear, and catalog refresh.
+
+#### Phase 5B — local disk dashboard
+
+- Extend the existing **Local Workspaces** view rather than creating a duplicate
+  lifecycle dashboard.
 - Per-workspace disk usage:
   - Working tree.
   - `.git` directory.
   - Total.
 - Sort/filter by size, last opened, branch, clone mode, and project group.
-- Disk quota display and configurable warning thresholds.
+- Aggregate measured usage and a configurable advisory warning threshold. A
+  disabled threshold is explicit, and unavailable measurements are never counted
+  as zero.
 - Inactive workspace recommendations:
   - “Unused for 30 days.”
   - “Uses more than 2 GB.”
-  - “Clean and fully pushed; safe to release.”
-- Favorites and recent remote projects.
-- Search across groups/projects.
+  - “Run fresh workspace safety checks before release.”
+- Validate ownership, marker, filesystem, and Git structure before measuring.
+  Stale, missing, moved, linked, or otherwise unverifiable entries remain in the
+  registry and are visibly labeled **Validation required**.
+- Measurements do not follow links, support cancellation, and run with bounded
+  concurrency. Refresh cancels the previous generation.
+- Recommendations based on age or size are presentation only. They never invoke
+  push, release, deletion, or registry mutation; “clean and fully pushed” is shown
+  only by the existing fresh safety workflow, never inferred from dashboard data.
+
+**Implementation status:** complete; manual Extension Development Host validation
+remains. Automated tests cover structured measurement, no-link traversal,
+cancellation, aggregate thresholds, unavailable values, sorting, multi-term
+filtering, recommendations, settings bounds, and command/menu contributions.
+
+#### Phase 5C — safe sparse expansion and profiles
+
 - Saved sparse profiles per project, for example:
   - `helm-only`
   - `ci-config`
@@ -566,6 +615,12 @@ gate are in [`docs/phase-4.1/README.md`](./docs/phase-4.1/README.md).
   and registry identity during expansion; detect and block checkout conflicts.
 - Safe manual cleanup of stale incomplete clone directories.
 
+#### Later Phase 5 quality of life
+
+- Favorites and recent remote projects.
+- Additional catalog organization beyond the bounded server-side search delivered
+  in Phase 5A.
+
 ### Useful dashboard model
 
 ```text
@@ -577,20 +632,38 @@ Locally Materialized
 │           feature/upgrade-helm · Sparse · Last used today
 │           [Open] [Push and release]
 └── 36 MB   security/kube-audit-policies
-            main · Sparse · Clean and pushed
-            [Release local workspace]
+            main · Sparse · Review with fresh safety check
+            [Open] [Check workspace safety]
 ```
 
 The extension should **recommend** cleanup based on state and disk size, but
 should not silently delete workspaces based solely on age. Phase 4.1 owns
 workspace-age reminders; Phase 5 may surface the same non-destructive status in
-the disk dashboard.
+the disk dashboard. Phase 5B recommendations require the user to run the normal
+fresh safety workflow before any release action.
 
 ## Phase 6: Team-ready hardening
 
 **Outcome:** hardened for local validation against the corporate environment.
 
 ### Deliverables
+
+#### Phase 6A — gated authenticated remote branch creation
+
+- Add narrowly scoped authenticated `POST` support only after a dedicated
+  remote-write threat-model and test gate passes; existing browse infrastructure
+  remains GET-only until then.
+- Creation must be an explicit no-match action followed by confirmation. Resolve
+  the chosen source ref to an exact commit SHA, recheck target-name collisions
+  immediately before `POST /projects/:id/repository/branches`, and never overwrite
+  or force-update a branch.
+- Treat permissions, protected-branch policy, cancellation, rate limits,
+  timeouts, retries, and ambiguous transport failures conservatively. After an
+  ambiguous response, query exact branch state and report uncertainty rather
+  than repeating a write automatically.
+- Validate branch names, redact credentials and sensitive responses, and test
+  authorization failures, races, duplicate requests, cancellation, malformed
+  responses, and protected/default-branch behavior before enabling the feature.
 
 - OAuth authorization-code flow as an alternative to PATs, if GitLab admins approve an OAuth application.
 - Multi-instance support, such as corporate GitLab plus GitLab.com.

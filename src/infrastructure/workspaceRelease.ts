@@ -27,6 +27,12 @@ export interface ReleaseAssessment {
   readonly decision: WorkspaceSafetyDecision;
 }
 
+export interface WorkspaceDiskUsage {
+  readonly worktreeBytes: number;
+  readonly gitDirectoryBytes: number;
+  readonly totalBytes: number;
+}
+
 export interface DeletionCapability {
   readonly workspaceId: string;
   readonly canonicalPath: string;
@@ -94,8 +100,23 @@ export class WorkspaceReleaseService {
     record: ManagedWorkspaceRecord,
     signal?: AbortSignal,
   ): Promise<number> {
-    await this.collector.collect(record, signal, false);
-    return measureTree(record.localPath, signal);
+    return (await this.measureWorkspaceDiskUsage(record, signal)).totalBytes;
+  }
+
+  public async measureWorkspaceDiskUsage(
+    record: ManagedWorkspaceRecord,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceDiskUsage> {
+    const snapshot = await this.collector.collect(record, signal, false);
+    const [worktreeBytes, gitDirectoryBytes] = await Promise.all([
+      measureTree(record.localPath, signal, snapshot.gitDirectory),
+      measureTree(snapshot.gitDirectory, signal),
+    ]);
+    return {
+      worktreeBytes,
+      gitDirectoryBytes,
+      totalBytes: worktreeBytes + gitDirectoryBytes,
+    };
   }
 
   public async push(
@@ -370,8 +391,10 @@ async function exists(candidate: string): Promise<boolean> {
 async function measureTree(
   candidate: string,
   signal?: AbortSignal,
+  excludedRoot?: string,
 ): Promise<number> {
   throwIfAborted(signal);
+  if (excludedRoot !== undefined && samePath(candidate, excludedRoot)) return 0;
   const candidateStat = await lstat(candidate);
   if (!candidateStat.isDirectory()) return candidateStat.size;
   let total = candidateStat.size;
@@ -382,13 +405,19 @@ async function measureTree(
       const child = path.join(candidate, entry.name);
       const childStat = await lstat(child);
       total += childStat.isDirectory()
-        ? await measureTree(child, signal)
+        ? await measureTree(child, signal, excludedRoot)
         : childStat.size;
     }
   } finally {
     await directory.close().catch(() => undefined);
   }
   return total;
+}
+
+function samePath(left: string, right: string): boolean {
+  return process.platform === "win32"
+    ? left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0
+    : left === right;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

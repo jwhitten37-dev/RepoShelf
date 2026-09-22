@@ -9,9 +9,11 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
+import type { WorkspaceDiskUsage } from "../infrastructure/workspaceRelease.js";
+
 export type DiskUsagePresentation =
   | { readonly state: "measuring" }
-  | { readonly state: "available"; readonly bytes: number }
+  | { readonly state: "available"; readonly usage: WorkspaceDiskUsage }
   | { readonly state: "unavailable" };
 
 export function diskUsageLabel(
@@ -19,7 +21,7 @@ export function diskUsageLabel(
 ): string {
   switch (usage?.state) {
     case "available":
-      return formatBytes(usage.bytes);
+      return formatBytes(usage.usage.totalBytes);
     case "measuring":
       return "Measuring…";
     case "unavailable":

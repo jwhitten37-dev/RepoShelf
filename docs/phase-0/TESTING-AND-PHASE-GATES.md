@@ -163,12 +163,24 @@ scenarios, and evidence requirements are in the
 
 ### Phase 5 — disk management and quality of life
 
+- Project search uses debounced, cancellable server-side queries with a bounded
+  result page; no-match and error states remain in the persistent picker.
+- Branch search remains open while terms change or return no matches, cancels
+  stale requests, and still resolves the selected branch to an immutable SHA.
+- Remote Catalog search-results mode is explicit and can be cleared or reset by
+  normal refresh without affecting project/ref storage.
 - The materialized view reconciles registry, marker, filesystem, and Git state;
   stale entries are labeled, not assumed safe.
 - Disk sizes distinguish worktree, Git directory, and total with cancellation
   and bounded concurrency.
 - Sorting/filtering/recommendations are accurate and never auto-delete based on
   age or size.
+- Aggregate measured usage distinguishes unavailable measurements from zero and
+  displays the configured advisory warning threshold. Changing the threshold or
+  inactivity age refreshes the dashboard without authorizing any action.
+- Stale, missing, moved, linked, marker-mismatched, or otherwise unverifiable
+  registry entries remain visible as requiring validation. Dashboard metadata
+  never labels a workspace clean or fully pushed without fresh safety checks.
 - Sparse-profile expansion is directory-oriented, validates paths, and
   preserves local work.
 - Existing sparse workspaces can be reopened, expanded with directories, or
@@ -180,6 +192,11 @@ scenarios, and evidence requirements are in the
 
 ### Phase 6 — team-ready hardening for local validation
 
+- Authenticated remote branch creation remains disabled until bounded POST
+  support passes a dedicated remote-write threat model and tests for explicit
+  confirmation, exact-SHA source resolution, collision races, permissions,
+  protected branches, cancellation, and ambiguous failures. Writes are never
+  retried automatically when success is uncertain.
 - Multiple instances are enabled without breaking prior identifiers/storage.
 - Timeout, retry/backoff, rate-limit, proxy, CA, and authorization behavior is
   documented and tested where locally reproducible.

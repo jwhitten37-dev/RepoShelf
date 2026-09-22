@@ -83,6 +83,10 @@ export interface ManagedWorkspaceRecord {
 
 export interface CatalogClient {
   getCurrentUser(signal?: AbortSignal): Promise<GitLabUser>;
+  searchProjects(
+    search: string,
+    signal?: AbortSignal,
+  ): Promise<readonly GitLabProject[]>;
   listTopLevelGroups(signal?: AbortSignal): Promise<readonly GitLabGroup[]>;
   listSubgroups(
     groupId: number,

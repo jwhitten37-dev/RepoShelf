@@ -61,6 +61,54 @@ describe("RestGitLabClient", () => {
     );
   });
 
+  it("searches accessible projects with a bounded server-side request", async () => {
+    const nextUrl = "https://gitlab.example.test/api/v4/projects?page=2";
+    const http = createHttpMock([
+      response([project(842, "Catalog", "platform/catalog")], {
+        link: `<${nextUrl}>; rel="next"`,
+      }),
+    ]);
+    const client = new RestGitLabClient(http.client);
+    const controller = new AbortController();
+
+    await expect(
+      client.searchProjects("  platform  ", controller.signal),
+    ).resolves.toEqual([
+      {
+        id: 842,
+        name: "Catalog",
+        pathWithNamespace: "platform/catalog",
+        namespaceId: 24,
+        namespaceKind: "group",
+        defaultBranch: "main",
+        webUrl: "https://gitlab.example.test/platform/catalog",
+        httpUrlToRepo: "https://gitlab.example.test/platform/catalog.git",
+      },
+    ]);
+    expect(http.get).toHaveBeenCalledWith(
+      "projects",
+      {
+        search: "platform",
+        search_namespaces: "true",
+        min_access_level: "10",
+        simple: "true",
+        order_by: "name",
+        sort: "asc",
+        per_page: "100",
+      },
+      controller.signal,
+    );
+    expect(http.getAbsolute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed project search response", async () => {
+    const http = createHttpMock([response({ projects: [] })]);
+    const client = new RestGitLabClient(http.client);
+    await expect(client.searchProjects("catalog")).rejects.toMatchObject({
+      code: "invalidResponse",
+    });
+  });
+
   it("rejects malformed collection responses", async () => {
     const http = createHttpMock([response({ not: "an array" })]);
     const client = new RestGitLabClient(http.client);
@@ -259,5 +307,17 @@ function group(id: number, name: string): unknown {
     full_path: name.toLowerCase(),
     parent_id: null,
     web_url: `https://gitlab.example.test/groups/${name.toLowerCase()}`,
+  };
+}
+
+function project(id: number, name: string, pathWithNamespace: string): unknown {
+  return {
+    id,
+    name,
+    path_with_namespace: pathWithNamespace,
+    namespace: { id: 24, kind: "group" },
+    default_branch: "main",
+    web_url: `https://gitlab.example.test/${pathWithNamespace}`,
+    http_url_to_repo: `https://gitlab.example.test/${pathWithNamespace}.git`,
   };
 }

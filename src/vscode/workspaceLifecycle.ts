@@ -3,8 +3,18 @@ import type { ManagedWorkspaceRecord } from "../domain/models.js";
 import type { ProjectedOperation } from "../infrastructure/coordinationProjection.js";
 import type { Logger } from "../infrastructure/logger.js";
 import type { MaterializationService } from "../infrastructure/materialization.js";
+import type { WorkspaceDiskUsage } from "../infrastructure/workspaceRelease.js";
 import type { LoadedWorkspaceRegistry } from "./workspaceRegistry.js";
-import { diskUsageLabel, type DiskUsagePresentation } from "./formatBytes.js";
+import {
+  diskUsageLabel,
+  formatBytes,
+  type DiskUsagePresentation,
+} from "./formatBytes.js";
+import {
+  projectWorkspaceDashboard,
+  projectWorkspaceRecommendation,
+  type WorkspaceSort,
+} from "./workspaceDashboardProjection.js";
 import {
   projectWorkspaceLifecycles,
   type WorkspaceLifecycleItem,
@@ -13,6 +23,11 @@ import {
 
 export type WorkspaceLifecycleNode =
   | { readonly type: "workspace"; readonly item: WorkspaceLifecycleItem }
+  | {
+      readonly type: "summary";
+      readonly label: string;
+      readonly warning: boolean;
+    }
   | {
       readonly type: "detail";
       readonly label: string;
@@ -26,11 +41,16 @@ export interface WorkspaceOperationProjection {
 }
 
 export interface WorkspaceDiskUsageProvider {
-  measureWorkspaceBytes(
+  measureWorkspaceDiskUsage(
     record: ManagedWorkspaceRecord,
     signal?: AbortSignal,
-  ): Promise<number>;
+  ): Promise<WorkspaceDiskUsage>;
 }
+
+const DASHBOARD_SORT_KEY = "reposhelf.workspaceDashboard.sort.v1";
+const DASHBOARD_FILTER_KEY = "reposhelf.workspaceDashboard.filter.v1";
+const DEFAULT_WARNING_BYTES = 2 * 1024 * 1024 * 1024;
+const DEFAULT_INACTIVE_DAYS = 30;
 
 export class WorkspaceLifecycleController implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<
@@ -55,6 +75,7 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     private readonly logger: Logger,
     private readonly projection?: WorkspaceOperationProjection,
     private readonly diskUsageProvider?: WorkspaceDiskUsageProvider,
+    private readonly dashboardState?: vscode.Memento,
   ) {
     this.status.command = "reposhelf.showWorkspaceLifecycleActions";
     this.status.name = "RepoShelf Workspace Lifecycle";
@@ -96,6 +117,17 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
   }
 
   public getTreeItem(node: WorkspaceLifecycleNode): vscode.TreeItem {
+    if (node.type === "summary") {
+      const item = new vscode.TreeItem(
+        node.label,
+        vscode.TreeItemCollapsibleState.None,
+      );
+      item.iconPath = new vscode.ThemeIcon(
+        node.warning ? "warning" : "database",
+      );
+      item.contextValue = "workspaceDashboardSummary";
+      return item;
+    }
     if (node.type === "detail") {
       const item = new vscode.TreeItem(
         node.label,
@@ -107,12 +139,20 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
       return item;
     }
     const { record, state } = node.item;
+    const disk = this.diskUsage.get(record.workspaceId);
     const item = new vscode.TreeItem(
       record.projectPath,
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     item.id = record.workspaceId;
-    item.description = `${record.targetBranch} · ${stateLabel(state)}`;
+    item.description = [
+      record.targetBranch,
+      stateLabel(state),
+      disk?.state === "unavailable" ? "Validation required" : undefined,
+    ]
+      .filter((value) => value !== undefined)
+      .join(" · ");
+    const recommendation = this.recommendation(record);
     item.tooltip = [
       `Project: ${record.projectPath}`,
       `Branch: ${record.targetBranch}`,
@@ -120,27 +160,74 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
       `Clone mode: ${cloneModeLabel(record)}`,
       `Lifecycle: ${stateLabel(state)}`,
       `Disk usage: ${diskUsageLabel(this.diskUsage.get(record.workspaceId))}`,
+      ...(recommendation === undefined
+        ? []
+        : [`Recommendation: ${recommendationLabel(recommendation.reasons)}`]),
     ].join("\n");
-    item.iconPath = new vscode.ThemeIcon(stateIcon(state));
+    item.iconPath = new vscode.ThemeIcon(
+      disk?.state === "unavailable" ? "warning" : stateIcon(state),
+    );
     item.contextValue = "managedWorkspace";
     return item;
   }
 
   public getChildren(node?: WorkspaceLifecycleNode): WorkspaceLifecycleNode[] {
     if (node === undefined) {
-      return this.items.map((item) => ({ type: "workspace", item }));
+      const dashboard = this.dashboard();
+      return [
+        {
+          type: "summary",
+          label: dashboardSummary(dashboard, this.filterText()),
+          warning: dashboard.exceedsWarning,
+        },
+        ...dashboard.items.map(({ lifecycle: item }) => ({
+          type: "workspace" as const,
+          item,
+        })),
+      ];
     }
-    if (node.type === "detail") return [];
+    if (node.type === "detail" || node.type === "summary") return [];
     const { record, state, operationId, diagnosticCode } = node.item;
+    const usage = this.diskUsage.get(record.workspaceId);
+    const recommendation = this.recommendation(record);
     return [
       detail("Branch", record.targetBranch, "git-branch"),
       detail("Local path", record.localPath, "folder"),
       detail("Clone mode", cloneModeLabel(record), "repo-clone"),
-      detail(
-        "Disk usage",
-        diskUsageLabel(this.diskUsage.get(record.workspaceId)),
-        "database",
-      ),
+      detail("Total disk usage", diskUsageLabel(usage), "database"),
+      ...(usage?.state === "available"
+        ? [
+            detail(
+              "Working tree",
+              formatBytes(usage.usage.worktreeBytes),
+              "files",
+            ),
+            detail(
+              "Git directory",
+              formatBytes(usage.usage.gitDirectoryBytes),
+              "git-commit",
+            ),
+          ]
+        : []),
+      ...(usage?.state === "unavailable"
+        ? [
+            detail(
+              "Disk validation",
+              "Unavailable; refresh or inspect diagnostics",
+              "warning",
+            ),
+          ]
+        : []),
+      detail("Last opened", formatTimestamp(record.lastOpenedAt), "history"),
+      ...(recommendation === undefined
+        ? []
+        : [
+            detail(
+              "Recommendation",
+              recommendationLabel(recommendation.reasons),
+              "lightbulb",
+            ),
+          ]),
       detail("Lifecycle", stateLabel(state), stateIcon(state)),
       ...(operationId === undefined
         ? []
@@ -149,6 +236,62 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
         ? []
         : [detail("Diagnostic", diagnosticCode, "warning")]),
     ];
+  }
+
+  public async selectSort(): Promise<void> {
+    const options: readonly {
+      readonly label: string;
+      readonly description: string;
+      readonly value: WorkspaceSort;
+    }[] = [
+      {
+        label: "$(database) Disk Usage",
+        description: "Largest measured workspace first",
+        value: "sizeDescending",
+      },
+      {
+        label: "$(history) Last Opened",
+        description: "Most recently opened first",
+        value: "lastOpenedDescending",
+      },
+      {
+        label: "$(repo) Project / Group",
+        description: "Alphabetical project path",
+        value: "projectAscending",
+      },
+      {
+        label: "$(git-branch) Branch",
+        description: "Alphabetical branch",
+        value: "branchAscending",
+      },
+      {
+        label: "$(repo-clone) Clone Mode",
+        description: "Full and sparse workspaces",
+        value: "cloneMode",
+      },
+    ];
+    const selected = await vscode.window.showQuickPick(options, {
+      title: "Sort Local Workspaces",
+      placeHolder: "Choose a dashboard sort order",
+      ignoreFocusOut: true,
+    });
+    if (selected === undefined) return;
+    await this.dashboardState?.update(DASHBOARD_SORT_KEY, selected.value);
+    this.changed.fire();
+  }
+
+  public async setFilter(): Promise<void> {
+    const value = await vscode.window.showInputBox({
+      title: "Filter Local Workspaces",
+      prompt:
+        "Match project/group, branch, full/sparse, lifecycle, recommended, inactive, or large. Clear to show all.",
+      value: this.filterText(),
+      placeHolder: "platform feature sparse recommended",
+      ignoreFocusOut: true,
+    });
+    if (value === undefined) return;
+    await this.dashboardState?.update(DASHBOARD_FILTER_KEY, value.trim());
+    this.changed.fire();
   }
 
   public async showActions(): Promise<void> {
@@ -324,12 +467,12 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
     this.changed.fire();
     void runBounded(records, 2, async (record) => {
       try {
-        const bytes = await this.diskUsageProvider?.measureWorkspaceBytes(
+        const usage = await this.diskUsageProvider?.measureWorkspaceDiskUsage(
           record,
           controller.signal,
         );
-        if (controller.signal.aborted || bytes === undefined) return;
-        this.diskUsage.set(record.workspaceId, { state: "available", bytes });
+        if (controller.signal.aborted || usage === undefined) return;
+        this.diskUsage.set(record.workspaceId, { state: "available", usage });
       } catch (error) {
         if (controller.signal.aborted) return;
         this.diskUsage.set(record.workspaceId, { state: "unavailable" });
@@ -344,6 +487,81 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
         this.logger.error("Managed workspace disk usage refresh failed", error);
       }
     });
+  }
+
+  private dashboard() {
+    const usage = new Map<string, WorkspaceDiskUsage | undefined>();
+    for (const [workspaceId, presentation] of this.diskUsage) {
+      usage.set(
+        workspaceId,
+        presentation.state === "available" ? presentation.usage : undefined,
+      );
+    }
+    const configuration = vscode.workspace.getConfiguration("reposhelf.disk");
+    const warningBytes = clamp(
+      configuration.get<number>("warningBytes", DEFAULT_WARNING_BYTES),
+      0,
+      1024 ** 4,
+    );
+    const inactiveDays = clamp(
+      configuration.get<number>("inactiveDays", DEFAULT_INACTIVE_DAYS),
+      1,
+      3650,
+    );
+    return projectWorkspaceDashboard(this.items, usage, {
+      sort: this.sort(),
+      filterText: this.filterText(),
+      warningBytes,
+      inactiveAgeMs: inactiveDays * 24 * 60 * 60 * 1000,
+      now: Date.now(),
+    });
+  }
+
+  private recommendation(record: ManagedWorkspaceRecord) {
+    const presentation = this.diskUsage.get(record.workspaceId);
+    const usage =
+      presentation?.state === "available" ? presentation.usage : undefined;
+    return projectWorkspaceRecommendation(record, usage, {
+      ...this.dashboardConfiguration(),
+      now: Date.now(),
+    });
+  }
+
+  private dashboardConfiguration(): {
+    readonly warningBytes: number;
+    readonly inactiveAgeMs: number;
+  } {
+    const configuration = vscode.workspace.getConfiguration("reposhelf.disk");
+    return {
+      warningBytes: clamp(
+        configuration.get<number>("warningBytes", DEFAULT_WARNING_BYTES),
+        0,
+        1024 ** 4,
+      ),
+      inactiveAgeMs:
+        clamp(
+          configuration.get<number>("inactiveDays", DEFAULT_INACTIVE_DAYS),
+          1,
+          3650,
+        ) *
+        24 *
+        60 *
+        60 *
+        1000,
+    };
+  }
+
+  private sort(): WorkspaceSort {
+    const value = this.dashboardState?.get<unknown>(
+      DASHBOARD_SORT_KEY,
+      "sizeDescending",
+    );
+    return isWorkspaceSort(value) ? value : "sizeDescending";
+  }
+
+  private filterText(): string {
+    const value = this.dashboardState?.get<unknown>(DASHBOARD_FILTER_KEY, "");
+    return typeof value === "string" ? value.slice(0, 256) : "";
   }
 
   private currentItem(): WorkspaceLifecycleItem | undefined {
@@ -446,6 +664,55 @@ function stateIcon(state: WorkspaceLifecycleState): string {
     case "attentionRequired":
       return "warning";
   }
+}
+
+function isWorkspaceSort(value: unknown): value is WorkspaceSort {
+  return (
+    value === "sizeDescending" ||
+    value === "lastOpenedDescending" ||
+    value === "projectAscending" ||
+    value === "branchAscending" ||
+    value === "cloneMode"
+  );
+}
+
+function recommendationLabel(
+  reasons: readonly ("inactive" | "large")[],
+): string {
+  return reasons
+    .map((reason) =>
+      reason === "inactive"
+        ? "Inactive; review local workspace"
+        : "Large; review disk usage",
+    )
+    .join(" · ");
+}
+
+function dashboardSummary(
+  dashboard: ReturnType<typeof projectWorkspaceDashboard>,
+  filterText: string,
+): string {
+  const filter = filterText === "" ? "" : ` · Filter: ${filterText}`;
+  const unavailable =
+    dashboard.unavailableCount === 0
+      ? ""
+      : ` · ${dashboard.unavailableCount} unavailable`;
+  const threshold =
+    dashboard.warningBytes === 0
+      ? " · size warning disabled"
+      : ` · warning at ${formatBytes(dashboard.warningBytes)}`;
+  return `${formatBytes(dashboard.measuredBytes)} measured${threshold} · ${dashboard.items.length} shown${unavailable}${filter}`;
+}
+
+function formatTimestamp(value: string): string {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toLocaleString()
+    : "Unavailable";
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function cancellationToAbortController(

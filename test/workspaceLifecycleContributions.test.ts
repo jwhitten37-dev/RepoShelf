@@ -27,6 +27,19 @@ interface ExtensionManifest {
       >
     >;
     readonly menus: Readonly<Record<string, readonly MenuContribution[]>>;
+    readonly configuration: {
+      readonly properties: Readonly<
+        Record<
+          string,
+          {
+            readonly default?: unknown;
+            readonly minimum?: number;
+            readonly maximum?: number;
+            readonly description?: string;
+          }
+        >
+      >;
+    };
   };
 }
 
@@ -111,5 +124,36 @@ describe("Phase 4.1C lifecycle contributions", () => {
         when?.includes("viewItem == managedWorkspace"),
       ),
     ).toBe(true);
+  });
+
+  it("contributes Phase 5B sort, filter, and bounded advisory settings", () => {
+    const titleActions = manifest.contributes.menus["view/title"]?.filter(
+      ({ when }) => when === "view == reposhelf.localWorkspaces",
+    );
+    expect(titleActions?.map(({ command }) => command)).toEqual([
+      "reposhelf.refreshLocalWorkspaces",
+      "reposhelf.filterLocalWorkspaces",
+      "reposhelf.sortLocalWorkspaces",
+    ]);
+    expect(extensionSource).toContain('"reposhelf.sortLocalWorkspaces"');
+    expect(extensionSource).toContain('"reposhelf.filterLocalWorkspaces"');
+
+    const warning =
+      manifest.contributes.configuration.properties[
+        "reposhelf.disk.warningBytes"
+      ];
+    expect(warning).toMatchObject({
+      default: 2_147_483_648,
+      minimum: 0,
+      maximum: 1_099_511_627_776,
+    });
+    expect(warning?.description).toContain("never causes automatic");
+
+    const inactive =
+      manifest.contributes.configuration.properties[
+        "reposhelf.disk.inactiveDays"
+      ];
+    expect(inactive).toMatchObject({ default: 30, minimum: 1, maximum: 3650 });
+    expect(inactive?.description).toContain("never cause automatic");
   });
 });

@@ -346,8 +346,15 @@ describe("WorkspaceReleaseService with a disposable Git remote", () => {
     await writeFile(path.join(outside, "large.txt"), "x".repeat(1024 * 1024));
     await symlink(outside, linked, directoryLinkType());
 
-    const bytes = await service.measureWorkspaceBytes(record);
-    expect(bytes).toBeLessThan(1024 * 1024);
+    const usage = await service.measureWorkspaceDiskUsage(record);
+    expect(usage.totalBytes).toBe(
+      usage.worktreeBytes + usage.gitDirectoryBytes,
+    );
+    expect(usage.gitDirectoryBytes).toBeGreaterThan(0);
+    expect(usage.totalBytes).toBeLessThan(1024 * 1024);
+    await expect(service.measureWorkspaceBytes(record)).resolves.toBe(
+      usage.totalBytes,
+    );
 
     const controller = new AbortController();
     controller.abort();

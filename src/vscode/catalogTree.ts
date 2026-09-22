@@ -59,6 +59,12 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
   private readonly clients = new Map<string, Promise<CatalogClient>>();
   private readonly users = new Map<string, Promise<GitLabUser>>();
   private readonly contexts = new Map<string, Promise<ProjectRefContext>>();
+  private projectSearch:
+    | {
+        readonly search: string;
+        readonly nodes: readonly ProjectNode[];
+      }
+    | undefined;
 
   public readonly onDidChangeTreeData = this.changed.event;
 
@@ -73,6 +79,10 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
     this.clients.clear();
     this.users.clear();
     this.contexts.clear();
+    if (node === undefined) {
+      this.projectSearch = undefined;
+      this.setProjectSearchContext(false);
+    }
     this.changed.fire(node);
   }
 
@@ -109,10 +119,47 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
   public async searchBranches(
     node: ProjectNode,
     search: string,
+    signal?: AbortSignal,
   ): Promise<readonly GitLabBranch[]> {
     return (await this.getClient(node.instance)).searchBranches(
       node.project.id,
       search,
+      signal,
+    );
+  }
+
+  public async searchProjects(
+    search: string,
+    signal?: AbortSignal,
+  ): Promise<readonly ProjectNode[]> {
+    const instance = this.instances.getEnabledInstance();
+    if (instance === undefined) return [];
+    return (
+      await (await this.getClient(instance)).searchProjects(search, signal)
+    ).map((project) => ({ type: "project" as const, instance, project }));
+  }
+
+  public showProjectSearch(
+    search: string,
+    nodes: readonly ProjectNode[],
+  ): void {
+    this.projectSearch = { search, nodes };
+    this.setProjectSearchContext(true);
+    this.changed.fire();
+  }
+
+  public clearProjectSearch(): void {
+    if (this.projectSearch === undefined) return;
+    this.projectSearch = undefined;
+    this.setProjectSearchContext(false);
+    this.changed.fire();
+  }
+
+  private setProjectSearchContext(active: boolean): void {
+    void vscode.commands.executeCommand(
+      "setContext",
+      "reposhelf.projectSearchActive",
+      active,
     );
   }
 
@@ -237,6 +284,16 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
   public async getChildren(node?: CatalogNode): Promise<CatalogNode[]> {
     try {
       if (node === undefined) {
+        if (this.projectSearch !== undefined) {
+          return [
+            {
+              type: "message",
+              label: `Project search: ${this.projectSearch.search}`,
+              description: `${this.projectSearch.nodes.length} result${this.projectSearch.nodes.length === 1 ? "" : "s"}`,
+            },
+            ...this.projectSearch.nodes,
+          ];
+        }
         const instance = this.instances.getEnabledInstance();
         return instance === undefined ? [] : [{ type: "instance", instance }];
       }

@@ -63,6 +63,18 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "reposhelf.searchProjects",
+        "title": "Search Projects",
+        "category": "RepoShelf",
+        "icon": "$(search)"
+      },
+      {
+        "command": "reposhelf.clearProjectSearch",
+        "title": "Clear Project Search",
+        "category": "RepoShelf",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "reposhelf.selectBranch",
         "title": "Select Branch",
         "category": "RepoShelf",
@@ -108,6 +120,18 @@
         "title": "Refresh Local Workspaces",
         "category": "RepoShelf",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "reposhelf.sortLocalWorkspaces",
+        "title": "Sort Local Workspaces",
+        "category": "RepoShelf",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "reposhelf.filterLocalWorkspaces",
+        "title": "Filter Local Workspaces",
+        "category": "RepoShelf",
+        "icon": "$(filter)"
       },
       {
         "command": "reposhelf.reopenManagedWorkspace",
@@ -229,6 +253,16 @@
           "group": "navigation@1"
         },
         {
+          "command": "reposhelf.searchProjects",
+          "when": "view == reposhelf.catalog && reposhelf.hasInstance == true",
+          "group": "navigation@1"
+        },
+        {
+          "command": "reposhelf.clearProjectSearch",
+          "when": "view == reposhelf.catalog && reposhelf.projectSearchActive == true",
+          "group": "navigation@1.5"
+        },
+        {
           "command": "reposhelf.testConnection",
           "when": "view == reposhelf.catalog && reposhelf.hasInstance == true",
           "group": "navigation@2"
@@ -241,7 +275,17 @@
         {
           "command": "reposhelf.refreshLocalWorkspaces",
           "when": "view == reposhelf.localWorkspaces",
+          "group": "navigation@3"
+        },
+        {
+          "command": "reposhelf.filterLocalWorkspaces",
+          "when": "view == reposhelf.localWorkspaces",
           "group": "navigation@1"
+        },
+        {
+          "command": "reposhelf.sortLocalWorkspaces",
+          "when": "view == reposhelf.localWorkspaces",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -359,6 +403,22 @@
           "maximum": 209715200,
           "scope": "machine-overridable",
           "description": "Maximum total size of the in-memory remote file cache."
+        },
+        "reposhelf.disk.warningBytes": {
+          "type": "number",
+          "default": 2147483648,
+          "minimum": 0,
+          "maximum": 1099511627776,
+          "scope": "machine-overridable",
+          "description": "Advisory disk-usage threshold in bytes for the Local Workspaces dashboard. Set to 0 to disable size warnings. This setting never causes automatic release or deletion."
+        },
+        "reposhelf.disk.inactiveDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 3650,
+          "scope": "machine-overridable",
+          "description": "Days since last open before the Local Workspaces dashboard recommends reviewing a retained workspace. Recommendations never cause automatic release or deletion."
         },
         "reposhelf.reminders.enabled": {
           "type": "boolean",

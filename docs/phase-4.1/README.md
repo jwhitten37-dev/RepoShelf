@@ -2,12 +2,18 @@
 
 ## Status
 
-**Phase 4.1B complete; Phase 4.1C implementation in progress.** Phase 4
-established a safe restart-based Windows release path. Phase 4.1 retains that
-path as a fallback while adding cross-window coordination, retained-workspace
-lifecycle UX, visible release actions, reminders, and recovery behavior suitable
-for production use. Genuine Windows sleep/resume remains part of the Phase 4.1D
-native-Windows matrix.
+**Complete and signed off.** Phase 4 established a safe restart-based Windows
+release path. Phase 4.1 retains that path as a fallback while adding cross-window
+coordination, retained-workspace lifecycle UX, visible release actions,
+reminders, and recovery behavior suitable for production use.
+
+The Phase 4.1D native-Windows gate passed all W01–W28 rows against the workflow
+VSIX `chiefwizard.reposhelf@0.1.0` built from commit `f263b8d`. The user accepted
+the gate and closed Phase 4.1. Previously blocked debugger-dependent rows were
+validated with transient cut points without modifying the tested artifact.
+Repository documentation retains only this sanitized result and artifact
+provenance; tokens, corporate identifiers, local paths, and raw journal contents
+are not retained.
 
 The 4.1B storage substrate implements strict bounded record parsing, no-follow
 journal setup, immutable publication, atomic lease replacement, ordered
@@ -315,3 +321,6 @@ not free its allocation or make immediate full-clone materialization safe.
   without a redundant window.
 - Reminder and ignored-content behavior cannot silently lose local work.
 - The complete native Windows adversarial matrix passes.
+
+All exit criteria are satisfied. The W01–W28 native-Windows matrix passed and
+Phase 4.1 was signed off before Phase 5A implementation began.

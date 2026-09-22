@@ -77,7 +77,16 @@ describe("workspace byte formatting", () => {
     expect(diskUsageLabel(undefined)).toBe("Unavailable");
     expect(diskUsageLabel({ state: "measuring" })).toBe("Measuring…");
     expect(diskUsageLabel({ state: "unavailable" })).toBe("Unavailable");
-    expect(diskUsageLabel({ state: "available", bytes: 1536 })).toBe("1.5 KB");
+    expect(
+      diskUsageLabel({
+        state: "available",
+        usage: {
+          worktreeBytes: 512,
+          gitDirectoryBytes: 1024,
+          totalBytes: 1536,
+        },
+      }),
+    ).toBe("1.5 KB");
   });
 });
 

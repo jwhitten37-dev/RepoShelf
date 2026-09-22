@@ -21,6 +21,33 @@ export class RestGitLabClient implements CatalogClient {
     return parseUser(await response.json());
   }
 
+  public async searchProjects(
+    search: string,
+    signal?: AbortSignal,
+  ): Promise<readonly GitLabProject[]> {
+    const response = await this.http.get(
+      "projects",
+      {
+        search: search.trim(),
+        search_namespaces: "true",
+        min_access_level: "10",
+        simple: "true",
+        order_by: "name",
+        sort: "asc",
+        per_page: PAGE_SIZE,
+      },
+      signal,
+    );
+    const body = await response.json();
+    if (!Array.isArray(body)) {
+      throw new GitLabError(
+        "invalidResponse",
+        "GitLab returned a non-array project search response.",
+      );
+    }
+    return body.map(parseProject);
+  }
+
   public async listTopLevelGroups(
     signal?: AbortSignal,
   ): Promise<readonly GitLabGroup[]> {

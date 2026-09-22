@@ -8,7 +8,7 @@ import {
 } from "../domain/remoteUri.js";
 import type { Logger } from "../infrastructure/logger.js";
 import type { MaterializationService } from "../infrastructure/materialization.js";
-import type { ManagedWorkspaceRecord } from "../domain/models.js";
+import type { GitLabBranch, ManagedWorkspaceRecord } from "../domain/models.js";
 import type { TokenStore } from "../infrastructure/secretStore.js";
 import type {
   CatalogNode,
@@ -18,6 +18,25 @@ import type {
 } from "./catalogTree.js";
 import type { ClientFactory } from "./clientFactory.js";
 import type { InstanceService } from "./instanceService.js";
+
+const SEARCH_DEBOUNCE_MS = 300;
+
+interface ProjectSearchItem extends vscode.QuickPickItem {
+  readonly itemType: "project";
+  readonly node: ProjectNode;
+}
+
+interface BranchSearchItem extends vscode.QuickPickItem {
+  readonly itemType: "branch";
+  readonly branch: GitLabBranch;
+}
+
+interface SearchMessageItem extends vscode.QuickPickItem {
+  readonly itemType: "message";
+}
+
+type ProjectPickerItem = ProjectSearchItem | SearchMessageItem;
+type BranchPickerItem = BranchSearchItem | SearchMessageItem;
 
 export class CommandController {
   public constructor(
@@ -143,6 +162,92 @@ export class CommandController {
     );
   }
 
+  public async searchProjects(): Promise<void> {
+    if (this.instances.getEnabledInstance() === undefined) {
+      await vscode.window.showWarningMessage("Add a GitLab instance first.");
+      return;
+    }
+    const picker = vscode.window.createQuickPick<ProjectPickerItem>();
+    picker.title = "Search RepoShelf Projects";
+    picker.placeholder = "Type a project or namespace name";
+    picker.matchOnDescription = true;
+    picker.matchOnDetail = true;
+    picker.ignoreFocusOut = true;
+    picker.items = [
+      searchMessage("Type at least two characters to search GitLab."),
+    ];
+
+    let timer: NodeJS.Timeout | undefined;
+    let controller: AbortController | undefined;
+    let generation = 0;
+    let currentNodes: readonly ProjectNode[] = [];
+    const disposables = [
+      picker.onDidChangeValue((value) => {
+        generation += 1;
+        const currentGeneration = generation;
+        if (timer !== undefined) clearTimeout(timer);
+        controller?.abort();
+        controller = undefined;
+        currentNodes = [];
+        const search = value.trim();
+        if (search.length < 2) {
+          picker.busy = false;
+          picker.items = [
+            searchMessage("Type at least two characters to search GitLab."),
+          ];
+          return;
+        }
+        picker.busy = true;
+        picker.items = [searchMessage("Searching GitLab projects…")];
+        timer = setTimeout(() => {
+          controller = new AbortController();
+          void this.catalog
+            .searchProjects(search, controller.signal)
+            .then((nodes) => {
+              if (currentGeneration !== generation) return;
+              currentNodes = nodes;
+              picker.busy = false;
+              picker.items =
+                nodes.length === 0
+                  ? [searchMessage(`No projects matched “${search}”.`)]
+                  : nodes.map(projectSearchItem);
+            })
+            .catch((error: unknown) => {
+              if (
+                currentGeneration !== generation ||
+                controller?.signal.aborted
+              )
+                return;
+              picker.busy = false;
+              picker.items = [searchMessage(toUserMessage(error))];
+              this.logger.error("Remote project search failed", error);
+            });
+        }, SEARCH_DEBOUNCE_MS);
+      }),
+      picker.onDidAccept(() => {
+        const selected = picker.selectedItems[0];
+        if (selected?.itemType !== "project" || currentNodes.length === 0)
+          return;
+        const search = picker.value.trim();
+        this.catalog.showProjectSearch(search, currentNodes);
+        picker.hide();
+        void vscode.commands.executeCommand("reposhelf.catalog.focus");
+      }),
+      picker.onDidHide(() => {
+        generation += 1;
+        if (timer !== undefined) clearTimeout(timer);
+        controller?.abort();
+        for (const disposable of disposables) disposable.dispose();
+        picker.dispose();
+      }),
+    ];
+    picker.show();
+  }
+
+  public clearProjectSearch(): void {
+    this.catalog.clearProjectSearch();
+  }
+
   public async selectBranch(node: ProjectNode | undefined): Promise<void> {
     if (node?.type !== "project") {
       await vscode.window.showWarningMessage(
@@ -150,51 +255,9 @@ export class CommandController {
       );
       return;
     }
+    const selected = await this.pickBranch(node);
+    if (selected === undefined) return;
     try {
-      const search = await vscode.window.showInputBox({
-        title: `Select Branch — ${node.project.name}`,
-        prompt: "Enter part of a branch name to search GitLab",
-        placeHolder: "feature/upgrade",
-        ignoreFocusOut: true,
-        validateInput: (value) =>
-          value.trim() === ""
-            ? "Enter at least one search character."
-            : undefined,
-      });
-      if (search === undefined) return;
-      const branches = await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Window,
-          title: `Searching branches in ${node.project.name}…`,
-        },
-        () => this.catalog.searchBranches(node, search),
-      );
-      if (branches.length === 0) {
-        await vscode.window.showInformationMessage(
-          `No branches matched “${search.trim()}”.`,
-        );
-        return;
-      }
-      const selected = await vscode.window.showQuickPick(
-        branches.map((branch) => ({
-          label: `$(git-branch) ${branch.name}`,
-          description: branch.commitSha.slice(0, 12),
-          detail: [
-            branch.isDefault ? "default" : undefined,
-            branch.isProtected ? "protected" : undefined,
-          ]
-            .filter((value) => value !== undefined)
-            .join(" · "),
-          branch,
-        })),
-        {
-          title: `Select Branch — ${node.project.name}`,
-          placeHolder: "Choose a branch",
-          ignoreFocusOut: true,
-        },
-      );
-      if (selected === undefined) return;
-
       const activeUri = vscode.window.activeTextEditor?.document.uri;
       const context = await this.catalog.selectBranch(
         node,
@@ -208,6 +271,93 @@ export class CommandController {
     } catch (error) {
       this.report("Unable to select the GitLab branch", error);
     }
+  }
+
+  private pickBranch(node: ProjectNode): Promise<BranchSearchItem | undefined> {
+    return new Promise((resolve) => {
+      const picker = vscode.window.createQuickPick<BranchPickerItem>();
+      picker.title = `Select Branch — ${node.project.name}`;
+      picker.placeholder = "Type part of a branch name";
+      picker.matchOnDescription = true;
+      picker.ignoreFocusOut = true;
+      picker.items = [
+        searchMessage("Type at least one character to search GitLab."),
+      ];
+
+      let timer: NodeJS.Timeout | undefined;
+      let controller: AbortController | undefined;
+      let generation = 0;
+      let settled = false;
+      const complete = (item?: BranchSearchItem): void => {
+        if (settled) return;
+        settled = true;
+        resolve(item);
+        picker.hide();
+      };
+      const disposables = [
+        picker.onDidChangeValue((value) => {
+          generation += 1;
+          const currentGeneration = generation;
+          if (timer !== undefined) clearTimeout(timer);
+          controller?.abort();
+          controller = undefined;
+          const search = value.trim();
+          if (search === "") {
+            picker.busy = false;
+            picker.items = [
+              searchMessage("Type at least one character to search GitLab."),
+            ];
+            return;
+          }
+          picker.busy = true;
+          picker.items = [searchMessage("Searching GitLab branches…")];
+          timer = setTimeout(() => {
+            controller = new AbortController();
+            void this.catalog
+              .searchBranches(node, search, controller.signal)
+              .then((branches) => {
+                if (currentGeneration !== generation) return;
+                picker.busy = false;
+                picker.items =
+                  branches.length === 0
+                    ? [
+                        searchMessage(`No branches matched “${search}”.`),
+                        searchMessage(
+                          "Remote branch creation is planned for Phase 6A.",
+                        ),
+                      ]
+                    : branches.map(branchSearchItem);
+              })
+              .catch((error: unknown) => {
+                if (
+                  currentGeneration !== generation ||
+                  controller?.signal.aborted
+                )
+                  return;
+                picker.busy = false;
+                picker.items = [searchMessage(toUserMessage(error))];
+                this.logger.error("Remote branch search failed", error);
+              });
+          }, SEARCH_DEBOUNCE_MS);
+        }),
+        picker.onDidAccept(() => {
+          const selected = picker.selectedItems[0];
+          if (selected?.itemType === "branch") complete(selected);
+        }),
+        picker.onDidHide(() => {
+          generation += 1;
+          if (timer !== undefined) clearTimeout(timer);
+          controller?.abort();
+          for (const disposable of disposables) disposable.dispose();
+          picker.dispose();
+          if (!settled) {
+            settled = true;
+            resolve(undefined);
+          }
+        }),
+      ];
+      picker.show();
+    });
   }
 
   public async openRemoteFile(node: RepositoryNode | undefined): Promise<void> {
@@ -535,6 +685,44 @@ function createUri(
     path: createRemoteFilePath(projectId, path),
     query: createRemoteFileQuery(commitSha, displayRef),
   });
+}
+
+function searchMessage(label: string): SearchMessageItem {
+  return {
+    itemType: "message",
+    label: `$(info) ${label}`,
+    alwaysShow: true,
+  };
+}
+
+function projectSearchItem(node: ProjectNode): ProjectSearchItem {
+  return {
+    itemType: "project",
+    label: `$(repo) ${node.project.name}`,
+    description: node.project.pathWithNamespace,
+    detail:
+      node.project.defaultBranch === null
+        ? "Empty repository"
+        : `Default branch: ${node.project.defaultBranch}`,
+    alwaysShow: true,
+    node,
+  };
+}
+
+function branchSearchItem(branch: GitLabBranch): BranchSearchItem {
+  return {
+    itemType: "branch",
+    label: `$(git-branch) ${branch.name}`,
+    description: branch.commitSha.slice(0, 12),
+    detail: [
+      branch.isDefault ? "default" : undefined,
+      branch.isProtected ? "protected" : undefined,
+    ]
+      .filter((value) => value !== undefined)
+      .join(" · "),
+    alwaysShow: true,
+    branch,
+  };
 }
 
 function cancellationToAbortController(
