@@ -596,6 +596,13 @@ filtering, recommendations, settings bounds, and command/menu contributions.
 
 #### Phase 5C — safe sparse expansion and profiles
 
+**Status:** deferred until after the initial Marketplace MVP. Phase 5C is not
+complete and is not part of the MVP release scope. The current product may create,
+reopen, measure, and safely release supported sparse workspaces, but it does not
+promise saved sparse profiles, in-place sparse expansion, profile switching, or
+sparse-to-full conversion. Those capabilities retain the safety requirements below
+and will be implemented and gated as a post-MVP iteration.
+
 - Saved sparse profiles per project, for example:
   - `helm-only`
   - `ci-config`
@@ -644,7 +651,9 @@ fresh safety workflow before any release action.
 
 ## Phase 6: Team-ready hardening
 
-**Outcome:** hardened for local validation against the corporate environment.
+**Outcome:** hardened for local validation against the corporate environment and
+ready to enter Marketplace MVP release preparation without waiting for deferred
+Phase 5C functionality.
 
 ### Deliverables
 
@@ -714,6 +723,13 @@ Windows destructive-path validation retained as a release gate.
 **Outcome:** a reviewed, reproducible, provider-neutral VS Code Marketplace
 release after team-ready hardening.
 
+**MVP scope decision:** Phase 5C sparse profiles and in-place sparse expansion are
+explicitly deferred until after the initial Marketplace release. Publication does
+not claim those capabilities and does not require their acceptance gate. Phase 6
+mandatory hardening and manual gates remain prerequisites; optional OAuth,
+merge-request integration, and persistent offline caching are likewise not MVP
+release blockers unless separately promoted into scope.
+
 ### Deliverables
 
 - Use the confirmed `chiefwizard` Marketplace publisher and extension identity
@@ -741,9 +757,11 @@ If you are implementing this yourself, the highest-value sequence is:
 5. Safe push-and-release local workspace flow.
 6. Coordinated cross-window release, retained-workspace UX, visible actions, and
    non-destructive reminders.
-7. Disk-management dashboard, saved sparse profiles, and sparse-to-full
-   expansion.
-8. OAuth, merge requests, multi-instance support, and team-ready hardening.
-9. Marketplace release readiness.
+7. Disk-management dashboard.
+8. Mandatory team-ready hardening and corporate manual gates.
+9. Marketplace MVP release readiness.
+10. Post-MVP sparse profiles, safe in-place sparse expansion, and sparse-to-full
+    conversion.
+11. Optional OAuth, merge requests, and other capability-gated enhancements.
 
 That order proves the central value early: **browse any GitLab project and branch without consuming clone space**. It then adds the more complex local Git lifecycle only after the remote viewer, data model, auth, and group/project hierarchy are stable.

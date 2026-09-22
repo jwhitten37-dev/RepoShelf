@@ -181,14 +181,18 @@ scenarios, and evidence requirements are in the
 - Stale, missing, moved, linked, marker-mismatched, or otherwise unverifiable
   registry entries remain visible as requiring validation. Dashboard metadata
   never labels a workspace clean or fully pushed without fresh safety checks.
-- Sparse-profile expansion is directory-oriented, validates paths, and
-  preserves local work.
-- Existing sparse workspaces can be reopened, expanded with directories, or
-  converted to a full worktree without conflicting allocation or loss of edits,
-  commits, ignored content, or identity.
-- Release and Rematerialize as Full Clone is offered only after complete release
-  proof; closing a sparse workspace alone never frees its allocation.
-- Manual stale-temp cleanup uses the same containment/ownership guardrails.
+- Phase 5C sparse profiles, in-place expansion, sparse-to-full conversion, and
+  stale incomplete-clone cleanup are explicitly deferred until after the initial
+  Marketplace MVP. They are not claimed by, and do not block, that MVP.
+- When Phase 5C resumes, sparse-profile expansion must be directory-oriented,
+  validate paths, and preserve local work.
+- When Phase 5C resumes, existing sparse workspaces must be reopenable,
+  expandable with directories, or convertible to a full worktree without a
+  conflicting allocation or loss of edits, commits, ignored content, or identity.
+- Release and Rematerialize as Full Clone may be offered only after complete
+  release proof; closing a sparse workspace alone never frees its allocation.
+- Future manual stale-temp cleanup must use the same containment/ownership
+  guardrails.
 
 ### Phase 6 — team-ready hardening for local validation
 
