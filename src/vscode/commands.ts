@@ -1,6 +1,7 @@
 import path from "node:path";
 import * as vscode from "vscode";
 import { GitLabError, toUserMessage } from "../domain/errors.js";
+import { validateBranchName } from "../domain/branchName.js";
 import {
   createRemoteFilePath,
   createRemoteFileQuery,
@@ -35,8 +36,13 @@ interface SearchMessageItem extends vscode.QuickPickItem {
   readonly itemType: "message";
 }
 
+interface CreateBranchItem extends vscode.QuickPickItem {
+  readonly itemType: "createBranch";
+  readonly branchName: string;
+}
+
 type ProjectPickerItem = ProjectSearchItem | SearchMessageItem;
-type BranchPickerItem = BranchSearchItem | SearchMessageItem;
+type BranchPickerItem = BranchSearchItem | CreateBranchItem | SearchMessageItem;
 
 export class CommandController {
   public constructor(
@@ -257,6 +263,10 @@ export class CommandController {
     }
     const selected = await this.pickBranch(node);
     if (selected === undefined) return;
+    if (selected.itemType === "createBranch") {
+      await this.createRemoteBranch(node, selected.branchName);
+      return;
+    }
     try {
       const activeUri = vscode.window.activeTextEditor?.document.uri;
       const context = await this.catalog.selectBranch(
@@ -273,7 +283,56 @@ export class CommandController {
     }
   }
 
-  private pickBranch(node: ProjectNode): Promise<BranchSearchItem | undefined> {
+  private async createRemoteBranch(
+    node: ProjectNode,
+    branchName: string,
+  ): Promise<void> {
+    try {
+      const activeUri = vscode.window.activeTextEditor?.document.uri;
+      const source = await this.catalog.resolveContext(node);
+      const confirmed = await vscode.window.showWarningMessage(
+        [
+          `Create remote branch “${branchName}”?`,
+          `Project: ${node.project.pathWithNamespace}`,
+          `Source: ${source.displayRef} @ ${source.resolvedCommitSha.slice(0, 12)}`,
+          "RepoShelf will create a new branch at this exact commit and will never overwrite an existing branch.",
+        ].join("\n"),
+        { modal: true },
+        "Create Remote Branch",
+      );
+      if (confirmed !== "Create Remote Branch") return;
+      const result = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Creating ${branchName} in ${node.project.name}…`,
+          cancellable: true,
+        },
+        async (_progress, cancellation) => {
+          const controller = cancellationToAbortController(cancellation);
+          return this.catalog.createBranch(
+            node,
+            branchName,
+            source.resolvedCommitSha,
+            controller.signal,
+          );
+        },
+      );
+      const qualifier =
+        result.confirmation === "reconciled"
+          ? " Exact remote state was confirmed after an uncertain response."
+          : "";
+      await vscode.window.showInformationMessage(
+        `${result.confirmation === "response" ? "Created" : "Confirmed"} remote branch ${branchName} at ${result.context.resolvedCommitSha.slice(0, 12)}.${qualifier}`,
+      );
+      await this.offerActiveFileTransition(node, result.context, activeUri);
+    } catch (error) {
+      this.report("Unable to create the remote GitLab branch", error);
+    }
+  }
+
+  private pickBranch(
+    node: ProjectNode,
+  ): Promise<BranchSearchItem | CreateBranchItem | undefined> {
     return new Promise((resolve) => {
       const picker = vscode.window.createQuickPick<BranchPickerItem>();
       picker.title = `Select Branch — ${node.project.name}`;
@@ -288,7 +347,7 @@ export class CommandController {
       let controller: AbortController | undefined;
       let generation = 0;
       let settled = false;
-      const complete = (item?: BranchSearchItem): void => {
+      const complete = (item?: BranchSearchItem | CreateBranchItem): void => {
         if (settled) return;
         settled = true;
         resolve(item);
@@ -322,9 +381,14 @@ export class CommandController {
                   branches.length === 0
                     ? [
                         searchMessage(`No branches matched “${search}”.`),
-                        searchMessage(
-                          "Remote branch creation is planned for Phase 6A.",
-                        ),
+                        ...(validateBranchName(search) === undefined
+                          ? [createBranchItem(search)]
+                          : [
+                              searchMessage(
+                                validateBranchName(search) ??
+                                  "Enter a valid Git branch name.",
+                              ),
+                            ]),
                       ]
                     : branches.map(branchSearchItem);
               })
@@ -342,7 +406,11 @@ export class CommandController {
         }),
         picker.onDidAccept(() => {
           const selected = picker.selectedItems[0];
-          if (selected?.itemType === "branch") complete(selected);
+          if (
+            selected?.itemType === "branch" ||
+            selected?.itemType === "createBranch"
+          )
+            complete(selected);
         }),
         picker.onDidHide(() => {
           generation += 1;
@@ -562,17 +630,7 @@ export class CommandController {
         if (branch === "") return "Enter a new branch name.";
         if (branch === context.displayRef)
           return "The editable branch must have a different name.";
-        if (
-          branch.startsWith("-") ||
-          branch.endsWith(".") ||
-          branch.endsWith("/") ||
-          branch.includes("..") ||
-          branch.includes("@{") ||
-          hasForbiddenBranchCharacter(branch)
-        ) {
-          return "Enter a valid Git branch name.";
-        }
-        return undefined;
+        return validateBranchName(branch);
       },
     });
   }
@@ -725,6 +783,17 @@ function branchSearchItem(branch: GitLabBranch): BranchSearchItem {
   };
 }
 
+function createBranchItem(branchName: string): CreateBranchItem {
+  return {
+    itemType: "createBranch",
+    label: `$(add) Create remote branch “${branchName}”`,
+    description: "Explicit authenticated GitLab write",
+    detail: "Requires confirmation and creates at the selected source commit",
+    alwaysShow: true,
+    branchName,
+  };
+}
+
 function cancellationToAbortController(
   token: vscode.CancellationToken,
 ): AbortController {
@@ -739,17 +808,4 @@ function cancellationToAbortController(
 function parentRepositoryPath(repositoryPath: string): string {
   const separator = repositoryPath.lastIndexOf("/");
   return separator === -1 ? "" : repositoryPath.slice(0, separator);
-}
-
-function hasForbiddenBranchCharacter(branch: string): boolean {
-  const forbidden = new Set(["~", "^", ":", "?", "*", "[", "\\"]);
-  return [...branch].some((character) => {
-    const code = character.codePointAt(0);
-    return (
-      code === undefined ||
-      code <= 32 ||
-      code === 127 ||
-      forbidden.has(character)
-    );
-  });
 }

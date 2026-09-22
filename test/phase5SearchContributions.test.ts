@@ -32,7 +32,7 @@ const commandSource = readFileSync(
   "utf8",
 );
 
-describe("Phase 5A search contributions", () => {
+describe("Phase 5A search and Phase 6A branch-write contributions", () => {
   it("registers project-search commands and exposes scoped catalog actions", () => {
     const commands = manifest.contributes.commands.map(
       ({ command }) => command,
@@ -62,9 +62,10 @@ describe("Phase 5A search contributions", () => {
   it("uses persistent Quick Picks rather than the former branch input box", () => {
     expect(commandSource).toContain("createQuickPick<ProjectPickerItem>()");
     expect(commandSource).toContain("createQuickPick<BranchPickerItem>()");
-    expect(commandSource).toContain(
-      "Remote branch creation is planned for Phase 6A.",
-    );
+    expect(commandSource).toContain('itemType: "createBranch"');
+    expect(commandSource).toContain('"Create Remote Branch"');
+    expect(commandSource).toContain("source.resolvedCommitSha");
+    expect(commandSource).toContain("{ modal: true }");
     expect(commandSource).not.toContain(
       "title: `Select Branch — ${node.project.name}`,\n        prompt:",
     );

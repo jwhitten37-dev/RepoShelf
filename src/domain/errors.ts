@@ -3,12 +3,14 @@ export type GitLabErrorCode =
   | "configuration"
   | "authentication"
   | "authorization"
+  | "conflict"
   | "notFound"
   | "rateLimited"
   | "tls"
   | "network"
   | "timeout"
   | "server"
+  | "writeUncertain"
   | "invalidResponse";
 
 export class GitLabError extends Error {
@@ -37,6 +39,7 @@ export function toUserMessage(error: unknown): string {
       "GitLab rejected the token. Verify that it is current and try again.",
     authorization:
       "The token is valid but does not have permission for this operation.",
+    conflict: error.message,
     notFound: "The requested GitLab resource was not found.",
     rateLimited: "GitLab rate-limited the request. Wait and try again.",
     tls: "The secure connection to GitLab failed. Check the corporate CA and proxy configuration.",
@@ -45,6 +48,8 @@ export function toUserMessage(error: unknown): string {
     timeout:
       "The GitLab request timed out. Check the network or increase the API timeout setting.",
     server: "GitLab returned a server error. Try again later.",
+    writeUncertain:
+      "GitLab may have accepted the remote write, but RepoShelf could not confirm the resulting state. Inspect the project before trying again.",
     invalidResponse: "GitLab returned an incompatible or invalid API response.",
   };
   return messages[error.code];

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { GitLabError } from "../src/domain/errors.js";
 import {
   RestGitLabClient,
   getNextLink,
@@ -150,6 +151,171 @@ describe("RestGitLabClient", () => {
     );
   });
 
+  it("creates a branch once at an exact source SHA after collision preflight", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock([], [], [response(branch("feature/new", sha))]);
+    http.get.mockRejectedValueOnce(
+      new GitLabError("notFound", "GitLab resource not found."),
+    );
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).resolves.toMatchObject({
+      branch: { name: "feature/new", commitSha: sha },
+      confirmation: "response",
+    });
+    expect(http.get).toHaveBeenCalledWith(
+      "projects/842/repository/branches/feature%2Fnew",
+      {},
+      undefined,
+    );
+    expect(http.postJson).toHaveBeenCalledOnce();
+    expect(http.postJson).toHaveBeenCalledWith(
+      "projects/842/repository/branches",
+      { branch: "feature/new", ref: sha },
+      undefined,
+    );
+  });
+
+  it("blocks an existing target before POST", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock([response(branch("feature/new", sha))]);
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(http.postJson).not.toHaveBeenCalled();
+  });
+
+  it("does not reconcile a deterministic authorization failure", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock();
+    http.get.mockRejectedValueOnce(new GitLabError("notFound", "missing"));
+    http.postJson.mockRejectedValueOnce(
+      new GitLabError("authorization", "denied"),
+    );
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).rejects.toMatchObject({ code: "authorization" });
+    expect(http.get).toHaveBeenCalledTimes(1);
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconciles an ambiguous write only when exact target state matches", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock([response(branch("feature/new", sha))]);
+    http.get.mockRejectedValueOnce(new GitLabError("notFound", "missing"));
+    http.postJson.mockRejectedValueOnce(new GitLabError("network", "failed"));
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).resolves.toMatchObject({
+      confirmation: "reconciled",
+      branch: { commitSha: sha },
+    });
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+    expect(http.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("reconciles a malformed successful response without repeating POST", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock(
+      [response(branch("feature/new", sha))],
+      [],
+      [response({ malformed: true })],
+    );
+    http.get.mockRejectedValueOnce(new GitLabError("notFound", "missing"));
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).resolves.toMatchObject({ confirmation: "reconciled" });
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+    expect(http.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("reconciles cancellation after possible dispatch without repeating POST", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock([response(branch("feature/new", sha))]);
+    http.get.mockRejectedValueOnce(new GitLabError("notFound", "missing"));
+    http.postJson.mockRejectedValueOnce(
+      new GitLabError("cancelled", "cancelled"),
+    );
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).resolves.toMatchObject({ confirmation: "reconciled" });
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+    expect(http.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a collision when ambiguous state exists at another SHA", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock([
+      response(branch("feature/new", "f".repeat(40))),
+    ]);
+    http.get.mockRejectedValueOnce(new GitLabError("notFound", "missing"));
+    http.postJson.mockRejectedValueOnce(new GitLabError("timeout", "timeout"));
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies an HTTP 400 race as collision without claiming creation", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock([response(branch("feature/new", sha))]);
+    http.get.mockRejectedValueOnce(new GitLabError("notFound", "missing"));
+    http.postJson.mockRejectedValueOnce(
+      new GitLabError("invalidResponse", "GitLab returned HTTP 400.", {
+        status: 400,
+      }),
+    );
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+    expect(http.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports uncertainty without repeating a write when reconciliation is missing", async () => {
+    const sha = "e".repeat(40);
+    const http = createHttpMock();
+    http.get.mockRejectedValue(new GitLabError("notFound", "missing"));
+    http.postJson.mockRejectedValueOnce(new GitLabError("server", "failed"));
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "feature/new", sha),
+    ).rejects.toMatchObject({ code: "writeUncertain" });
+    expect(http.postJson).toHaveBeenCalledTimes(1);
+    expect(http.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("validates branch and source SHA before network access", async () => {
+    const http = createHttpMock();
+    const client = new RestGitLabClient(http.client);
+
+    await expect(
+      client.createBranch(842, "bad name", "e".repeat(40)),
+    ).rejects.toMatchObject({ code: "configuration" });
+    await expect(
+      client.createBranch(842, "feature/new", "abc"),
+    ).rejects.toMatchObject({ code: "configuration" });
+    expect(http.get).not.toHaveBeenCalled();
+    expect(http.postJson).not.toHaveBeenCalled();
+  });
+
   it("loads one repository path at an immutable commit", async () => {
     const sha = "b".repeat(40);
     const http = createHttpMock([
@@ -236,12 +402,14 @@ describe("getNextLink", () => {
 });
 
 function createHttpMock(
-  getResponses: HttpResponse[],
+  getResponses: HttpResponse[] = [],
   absoluteResponses: HttpResponse[] = [],
+  postResponses: HttpResponse[] = [],
 ): {
   client: GitLabHttpClient;
   get: ReturnType<typeof vi.fn>;
   getAbsolute: ReturnType<typeof vi.fn>;
+  postJson: ReturnType<typeof vi.fn>;
 } {
   const get = vi.fn().mockImplementation(() => {
     const value = getResponses.shift();
@@ -255,10 +423,17 @@ function createHttpMock(
       ? Promise.reject(new Error("Unexpected getAbsolute call"))
       : Promise.resolve(value);
   });
+  const postJson = vi.fn().mockImplementation(() => {
+    const value = postResponses.shift();
+    return value === undefined
+      ? Promise.reject(new Error("Unexpected postJson call"))
+      : Promise.resolve(value);
+  });
   return {
-    client: { get, getAbsolute } as unknown as GitLabHttpClient,
+    client: { get, getAbsolute, postJson } as unknown as GitLabHttpClient,
     get,
     getAbsolute,
+    postJson,
   };
 }
 

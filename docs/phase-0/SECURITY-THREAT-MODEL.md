@@ -45,6 +45,8 @@
 | Timer-based loss of work           | Age/inactivity triggers reminders only; no silent timed push/release/deletion; explicit confirmation required |
 | Ignored local data loss            | Ignored is not disposable; inventory/classify conservatively; unknown ignored content blocks release          |
 | External process interference      | Fresh Git/filesystem checks; bounded handle failure; do not kill processes or force deletion                  |
+| Unintended remote ref write        | Explicit no-match action and confirmation; exact-SHA source; collision preflight; create-only endpoint        |
+| Duplicate/ambiguous remote write   | Send POST once; never replay redirects/retry automatically; exact GET reconciliation; report uncertainty      |
 
 ## Token policy
 
@@ -100,3 +102,6 @@ is metadata-only or unavailable and clearly communicated.
 - Redirect and origin tests proving authorization cannot cross hosts.
 - Manual corporate checks for CA/proxy, PAT policy, credential helper, and
   protected branches before organizational use.
+- Phase 6A remote branch creation must satisfy
+  [`../phase-6/REMOTE-BRANCH-WRITE-GATE.md`](../phase-6/REMOTE-BRANCH-WRITE-GATE.md)
+  before organizational use.

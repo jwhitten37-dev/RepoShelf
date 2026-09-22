@@ -1,5 +1,7 @@
 import { GitLabError } from "../domain/errors.js";
+import { validateBranchName } from "../domain/branchName.js";
 import type {
+  BranchCreationResult,
   CatalogClient,
   GitLabBranch,
   GitLabGroup,
@@ -134,6 +136,66 @@ export class RestGitLabClient implements CatalogClient {
     return parseBranch(await response.json());
   }
 
+  public async createBranch(
+    projectId: number,
+    branch: string,
+    sourceCommitSha: string,
+    signal?: AbortSignal,
+  ): Promise<BranchCreationResult> {
+    const target = branch.trim();
+    const validation = validateBranchName(target);
+    if (validation !== undefined) {
+      throw new GitLabError("configuration", validation);
+    }
+    if (!/^[0-9a-f]{40}$/u.test(sourceCommitSha)) {
+      throw new GitLabError(
+        "configuration",
+        "Remote branch creation requires a full lowercase source commit SHA.",
+      );
+    }
+    try {
+      await this.resolveBranch(projectId, target, signal);
+      throw new GitLabError(
+        "conflict",
+        `The remote branch “${target}” already exists.`,
+      );
+    } catch (error) {
+      if (!(error instanceof GitLabError) || error.code !== "notFound")
+        throw error;
+    }
+
+    try {
+      const response = await this.http.postJson(
+        `projects/${projectId}/repository/branches`,
+        { branch: target, ref: sourceCommitSha },
+        signal,
+      );
+      const created = parseBranch(await response.json());
+      if (created.name !== target || created.commitSha !== sourceCommitSha) {
+        throw new GitLabError(
+          "invalidResponse",
+          "GitLab returned branch state that did not match the create request.",
+        );
+      }
+      return { branch: created, confirmation: "response" };
+    } catch (error) {
+      if (
+        error instanceof GitLabError &&
+        error.code === "invalidResponse" &&
+        error.status === 400
+      ) {
+        await this.classifyCreateConflict(projectId, target, error);
+      }
+      if (!isAmbiguousWriteError(error)) throw error;
+      return this.reconcileBranchCreation(
+        projectId,
+        target,
+        sourceCommitSha,
+        error,
+      );
+    }
+  }
+
   public async listRepositoryTree(
     projectId: number,
     commitSha: string,
@@ -220,6 +282,65 @@ export class RestGitLabClient implements CatalogClient {
     }
     return results;
   }
+
+  private async reconcileBranchCreation(
+    projectId: number,
+    target: string,
+    sourceCommitSha: string,
+    cause: unknown,
+  ): Promise<BranchCreationResult> {
+    try {
+      const branch = await this.resolveBranch(projectId, target);
+      if (branch.commitSha !== sourceCommitSha) {
+        throw new GitLabError(
+          "conflict",
+          `The remote branch “${target}” exists at a different commit.`,
+        );
+      }
+      return { branch, confirmation: "reconciled" };
+    } catch (error) {
+      if (error instanceof GitLabError && error.code === "conflict")
+        throw error;
+      throw new GitLabError(
+        "writeUncertain",
+        "Remote branch creation could not be confirmed after an ambiguous response.",
+        { cause },
+      );
+    }
+  }
+
+  private async classifyCreateConflict(
+    projectId: number,
+    target: string,
+    original: GitLabError,
+  ): Promise<never> {
+    try {
+      await this.resolveBranch(projectId, target);
+    } catch (error) {
+      if (error instanceof GitLabError && error.code === "notFound")
+        throw original;
+      throw original;
+    }
+    throw new GitLabError(
+      "conflict",
+      `The remote branch “${target}” appeared during creation. RepoShelf did not overwrite it.`,
+    );
+  }
+}
+
+function isAmbiguousWriteError(error: unknown): boolean {
+  return (
+    error instanceof GitLabError &&
+    [
+      "cancelled",
+      ...(error.status === undefined ? ["invalidResponse" as const] : []),
+      "network",
+      "rateLimited",
+      "server",
+      "timeout",
+      "writeUncertain",
+    ].includes(error.code)
+  );
 }
 
 export function getNextLink(headers: Headers): URL | undefined {

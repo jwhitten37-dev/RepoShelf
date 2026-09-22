@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { toUserMessage } from "../domain/errors.js";
 import type {
+  BranchCreationResult,
   CatalogClient,
   GitLabBranch,
   GitLabGroup,
@@ -175,6 +176,29 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
     this.contexts.set(projectKey(node), Promise.resolve(context));
     this.changed.fire(node);
     return context;
+  }
+
+  public async createBranch(
+    node: ProjectNode,
+    branchName: string,
+    sourceCommitSha: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    readonly context: ProjectRefContext;
+    readonly confirmation: BranchCreationResult["confirmation"];
+  }> {
+    const result = await (
+      await this.getClient(node.instance)
+    ).createBranch(node.project.id, branchName, sourceCommitSha, signal);
+    const context = branchContext(node, result.branch);
+    await this.refs.set(
+      node.instance.instanceId,
+      node.project.id,
+      result.branch.name,
+    );
+    this.contexts.set(projectKey(node), Promise.resolve(context));
+    this.changed.fire(node);
+    return { context, confirmation: result.confirmation };
   }
 
   public resolveContext(node: ProjectNode): Promise<ProjectRefContext> {

@@ -54,6 +54,88 @@ describe("GitLabHttpClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("sends one authenticated JSON POST without credentials in the URL", async () => {
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(jsonResponse({ name: "feature/new" }, {}, 201));
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret-token",
+      timeoutMs: 1000,
+      fetch: fetchMock,
+    });
+
+    await client.postJson("projects/42/repository/branches", {
+      branch: "feature/new",
+      ref: "a".repeat(40),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url?.toString()).toBe(
+      "https://gitlab.example.test/company/api/v4/projects/42/repository/branches",
+    );
+    expect(url?.toString()).not.toContain("secret-token");
+    expect(init?.method).toBe("POST");
+    expect(init?.redirect).toBe("manual");
+    expect(new Headers(init?.headers).get("PRIVATE-TOKEN")).toBe(
+      "secret-token",
+    );
+    expect(new Headers(init?.headers).get("Content-Type")).toBe(
+      "application/json",
+    );
+    expect(init?.body).toBe(
+      JSON.stringify({ branch: "feature/new", ref: "a".repeat(40) }),
+    );
+  });
+
+  it("never follows or replays a POST redirect", async () => {
+    const fetchMock = vi.fn<FetchLike>().mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: {
+          location:
+            "https://gitlab.example.test/company/api/v4/projects/42/repository/branches",
+        },
+      }),
+    );
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      fetch: fetchMock,
+    });
+
+    await expect(
+      client.postJson("projects/42/repository/branches", {
+        branch: "feature/new",
+        ref: "a".repeat(40),
+      }),
+    ).rejects.toMatchObject({ code: "writeUncertain" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not dispatch a POST when already cancelled", async () => {
+    const fetchMock = vi.fn<FetchLike>();
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      fetch: fetchMock,
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      client.postJson(
+        "projects/42/repository/branches",
+        { branch: "feature/new", ref: "a".repeat(40) },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ code: "cancelled" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects a cross-origin redirect before forwarding credentials", async () => {
     const fetchMock = vi.fn<FetchLike>().mockResolvedValue(
       new Response(null, {
@@ -116,9 +198,13 @@ describe("GitLabHttpClient", () => {
   });
 });
 
-function jsonResponse(value: unknown, headers: HeadersInit = {}): Response {
+function jsonResponse(
+  value: unknown,
+  headers: HeadersInit = {},
+  status = 200,
+): Response {
   return new Response(JSON.stringify(value), {
-    status: 200,
+    status,
     headers: { "content-type": "application/json", ...headers },
   });
 }

@@ -38,7 +38,11 @@ export class GitLabHttpClient {
     signal?: AbortSignal,
   ): Promise<HttpResponse> {
     const url = this.createApiUrl(path, query);
-    return this.request(url, signal, 0);
+    return this.request(url, {
+      method: "GET",
+      ...(signal === undefined ? {} : { signal }),
+      redirectCount: 0,
+    });
   }
 
   public async getAbsolute(
@@ -46,7 +50,25 @@ export class GitLabHttpClient {
     signal?: AbortSignal,
   ): Promise<HttpResponse> {
     this.assertAllowedApiUrl(url);
-    return this.request(url, signal, 0);
+    return this.request(url, {
+      method: "GET",
+      ...(signal === undefined ? {} : { signal }),
+      redirectCount: 0,
+    });
+  }
+
+  public async postJson(
+    path: string,
+    body: Readonly<Record<string, string>>,
+    signal?: AbortSignal,
+  ): Promise<HttpResponse> {
+    const url = this.createApiUrl(path, {});
+    return this.request(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      ...(signal === undefined ? {} : { signal }),
+      redirectCount: 0,
+    });
   }
 
   private createApiUrl(
@@ -83,30 +105,48 @@ export class GitLabHttpClient {
 
   private async request(
     url: URL,
-    externalSignal: AbortSignal | undefined,
-    redirectCount: number,
+    options: {
+      readonly method: "GET" | "POST";
+      readonly body?: string;
+      readonly signal?: AbortSignal;
+      readonly redirectCount: number;
+    },
   ): Promise<HttpResponse> {
     this.assertAllowedApiUrl(url);
+    if (options.signal?.aborted === true) {
+      throw new GitLabError("cancelled", "Request cancelled.");
+    }
     const timeoutController = new AbortController();
     const timeout = setTimeout(() => {
       timeoutController.abort(new Error("request timed out"));
     }, this.options.timeoutMs);
-    const signal = combineSignals(externalSignal, timeoutController.signal);
+    const signal = combineSignals(options.signal, timeoutController.signal);
 
     try {
       const response = await this.fetchImplementation(url, {
-        method: "GET",
+        method: options.method,
         headers: {
           Accept: "application/json",
+          ...(options.method === "POST"
+            ? { "Content-Type": "application/json" }
+            : {}),
           "PRIVATE-TOKEN": this.options.token,
           "User-Agent": "GitLab-On-Demand-VS-Code",
         },
         redirect: "manual",
         signal,
+        ...(options.body === undefined ? {} : { body: options.body }),
       });
 
       if (response.status >= 300 && response.status < 400) {
-        if (redirectCount >= 5) {
+        if (options.method === "POST") {
+          throw new GitLabError(
+            "writeUncertain",
+            "GitLab redirected a remote write; RepoShelf did not replay it.",
+            { status: response.status },
+          );
+        }
+        if (options.redirectCount >= 5) {
           throw new GitLabError(
             "invalidResponse",
             "GitLab returned too many redirects.",
@@ -124,7 +164,10 @@ export class GitLabHttpClient {
         }
         const redirectUrl = new URL(location, url);
         this.assertAllowedApiUrl(redirectUrl);
-        return this.request(redirectUrl, externalSignal, redirectCount + 1);
+        return this.request(redirectUrl, {
+          ...options,
+          redirectCount: options.redirectCount + 1,
+        });
       }
 
       if (!response.ok) {
@@ -134,13 +177,17 @@ export class GitLabHttpClient {
     } catch (error) {
       throw mapFetchError(
         error,
-        externalSignal?.aborted === true,
+        isAborted(options.signal),
         timeoutController.signal.aborted,
       );
     } finally {
       clearTimeout(timeout);
     }
   }
+}
+
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
 }
 
 function combineSignals(
@@ -159,6 +206,10 @@ function mapHttpStatus(status: number): GitLabError {
     });
   if (status === 403)
     return new GitLabError("authorization", "GitLab denied this operation.", {
+      status,
+    });
+  if (status === 409)
+    return new GitLabError("conflict", "GitLab reported a conflicting ref.", {
       status,
     });
   if (status === 404)

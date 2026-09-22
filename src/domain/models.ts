@@ -41,6 +41,11 @@ export interface GitLabBranch {
   readonly canPush: boolean;
 }
 
+export interface BranchCreationResult {
+  readonly branch: GitLabBranch;
+  readonly confirmation: "response" | "reconciled";
+}
+
 export interface RepositoryEntry {
   readonly id: string;
   readonly name: string;
@@ -110,6 +115,12 @@ export interface CatalogClient {
     branch: string,
     signal?: AbortSignal,
   ): Promise<GitLabBranch>;
+  createBranch(
+    projectId: number,
+    branch: string,
+    sourceCommitSha: string,
+    signal?: AbortSignal,
+  ): Promise<BranchCreationResult>;
   listRepositoryTree(
     projectId: number,
     commitSha: string,

@@ -589,8 +589,8 @@ no-results, errors, selection, clear, and catalog refresh.
   push, release, deletion, or registry mutation; “clean and fully pushed” is shown
   only by the existing fresh safety workflow, never inferred from dashboard data.
 
-**Implementation status:** complete; manual Extension Development Host validation
-remains. Automated tests cover structured measurement, no-link traversal,
+**Status:** complete and user-tested. Automated tests cover structured
+measurement, no-link traversal,
 cancellation, aggregate thresholds, unavailable values, sorting, multi-term
 filtering, recommendations, settings bounds, and command/menu contributions.
 
@@ -664,6 +664,16 @@ fresh safety workflow before any release action.
 - Validate branch names, redact credentials and sensitive responses, and test
   authorization failures, races, duplicate requests, cancellation, malformed
   responses, and protected/default-branch behavior before enabling the feature.
+
+**Implementation status:** complete; the corporate disposable-project manual gate
+remains. The authenticated JSON POST is create-only, exact-origin/path bounded,
+sent once, and never replayed across redirects or retried automatically. Exact
+preflight collision checks, immutable source-SHA creation, ambiguous-result
+reconciliation, explicit confirmation, and conservative conflict/uncertainty
+reporting are implemented and covered by automated tests. The authoritative gate
+is [`docs/phase-6/REMOTE-BRANCH-WRITE-GATE.md`](./docs/phase-6/REMOTE-BRANCH-WRITE-GATE.md).
+
+#### Later Phase 6 slices
 
 - OAuth authorization-code flow as an alternative to PATs, if GitLab admins approve an OAuth application.
 - Multi-instance support, such as corporate GitLab plus GitLab.com.

@@ -197,6 +197,11 @@ scenarios, and evidence requirements are in the
   confirmation, exact-SHA source resolution, collision races, permissions,
   protected branches, cancellation, and ambiguous failures. Writes are never
   retried automatically when success is uncertain.
+- Phase 6A automated evidence is complete when POST is single-dispatch,
+  same-origin/API-path bounded, redirect-replay resistant, exact-SHA sourced, and
+  covered for collision races, deterministic authorization failures, malformed
+  responses, cancellation, and ambiguous-state reconciliation. Corporate use
+  remains gated on the disposable-project checks in the Phase 6 write gate.
 - Multiple instances are enabled without breaking prior identifiers/storage.
 - Timeout, retry/backoff, rate-limit, proxy, CA, and authorization behavior is
   documented and tested where locally reproducible.
