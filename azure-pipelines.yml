@@ -50,13 +50,6 @@ stages:
               set -euo pipefail
 
               package_version=`node -p "require('./package.json').version"`
-              package_id=`node -p "require('./package.json').publisher + '.' + require('./package.json').name"`
-
-              if [[ "$package_id" != "chiefwizard.reposhelf" ]]; then
-                echo "Unexpected Marketplace extension ID: $package_id" >&2
-                exit 1
-              fi
-
               if [[ "$BUILD_SOURCEBRANCH" == refs/tags/* ]]; then
                 expected_tag="v${package_version}"
                 actual_tag="${BUILD_SOURCEBRANCH#refs/tags/}"
@@ -73,46 +66,7 @@ stages:
                 fi
               fi
 
-              vsix_path="$(Build.ArtifactStagingDirectory)/reposhelf-${package_version}.vsix"
-              npm exec -- vsce package --out "$vsix_path" --no-yarn --pre-release
-
-              mapfile -t packaged_files < <(unzip -Z1 "$vsix_path" | sort)
-              expected_files=(
-                "[Content_Types].xml"
-                "extension.vsixmanifest"
-                "extension/LICENSE.txt"
-                "extension/dist/extension.js"
-                "extension/dist/extension.js.map"
-                "extension/package.json"
-                "extension/readme.md"
-                "extension/resources/reposhelf-activitybar.svg"
-                "extension/resources/reposhelf-icon.png"
-              )
-
-              if [[ "${packaged_files[*]}" != "${expected_files[*]}" ]]; then
-                echo "VSIX contents differ from the reviewed package allowlist." >&2
-                printf 'Packaged: %s\n' "${packaged_files[@]}" >&2
-                exit 1
-              fi
-
-              unzip -p "$vsix_path" extension/package.json > "$(Agent.TempDirectory)/packaged-package.json"
-              node - "$(Agent.TempDirectory)/packaged-package.json" "$package_version" <<'NODE'
-              const manifest = require(process.argv[2]);
-              const expectedVersion = process.argv[3];
-              const extensionId = `${manifest.publisher}.${manifest.name}`;
-
-              if (extensionId !== "chiefwizard.reposhelf") {
-                throw new Error(`Unexpected packaged extension ID: ${extensionId}`);
-              }
-
-              if (manifest.version !== expectedVersion) {
-                throw new Error(
-                  `Packaged version ${manifest.version} does not match ${expectedVersion}`,
-                );
-              }
-              NODE
-
-              sha256sum "$vsix_path"
+              npm run package:vsix -- --out-dir "$(Build.ArtifactStagingDirectory)"
             displayName: Package and inspect VSIX
 
           - task: PublishPipelineArtifact@1

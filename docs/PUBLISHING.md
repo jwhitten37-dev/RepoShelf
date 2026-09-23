@@ -32,9 +32,13 @@ resource ID to this repository.
 2. Formatting, linting, type checking, all tests, compilation, and a high-severity
    dependency audit must pass.
 3. The pinned local `@vscode/vsce` packages one VSIX.
-4. The VSIX file list and packaged `chiefwizard.reposhelf` identity are checked
-   against an explicit allowlist.
-5. The validated VSIX is retained as an Azure Pipeline artifact.
+4. `npm run package:vsix -- --out-dir <directory>` creates the candidate through
+   the pinned local `@vscode/vsce`, validates the payload and final archive against
+   explicit allowlists, and verifies the packaged `chiefwizard.reposhelf` identity,
+   version, workspace extension kind, and entry point.
+5. The validated VSIX and its JSON evidence file are retained as an Azure Pipeline
+   artifact. Evidence includes only public package metadata, exact file lists,
+   byte size, and SHA-256; it contains no environment dump or credentials.
 6. Only a `v*` tag can enter the publishing stage. The tag must exactly equal
    `v<package.json version>` and identify a commit contained in `origin/main`.
 7. The publishing stage downloads and publishes that exact VSIX without
@@ -72,7 +76,8 @@ reviewed release is approved:
 2. Move the corresponding changelog entries from **Unreleased** to a dated
    release section.
 3. Run `npm ci`, `npm run check`, `npm run compile`, and
-   `npm audit --audit-level=high` locally.
+   `npm audit --audit-level=high` locally. Package into a temporary directory with
+   `npm run package:vsix -- --out-dir <directory>` and review both generated files.
 4. Merge the reviewed release commit into `main` and confirm normal CI succeeds.
 5. Create and push an annotated tag matching the manifest exactly, for example
    `v0.1.0` for version `0.1.0`.

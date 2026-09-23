@@ -754,6 +754,11 @@ release blockers unless separately promoted into scope.
 - Produce a reproducible VSIX, inspect its complete contents, install it into a
   clean Extension Development Host, and repeat native Windows and Remote–WSL
   release gates.
+  **Phase 7.1 packaging implementation complete:** one cross-platform script uses
+  the pinned `@vscode/vsce`, enforces exact payload/archive allowlists and the
+  `chiefwizard.reposhelf` identity, and emits bounded SHA-256 JSON evidence. Linux,
+  Azure, and native-Windows pipelines invoke the same gate. Clean installation and
+  environment-specific smoke validation remain manual release gates.
 - Define release signing/provenance, changelog, versioning, rollback, and
   publisher-account security procedures.
 - Publish only after security review, dependency audit, license review, and all

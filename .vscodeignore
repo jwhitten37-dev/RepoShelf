@@ -8,6 +8,7 @@ scripts/**
 src/**
 test/**
 *.toml
+vitest.config.mts
 *.md
 .editorconfig
 .gitattributes

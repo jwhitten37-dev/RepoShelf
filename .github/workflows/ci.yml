@@ -22,4 +22,5 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - run: npm run package:vsix -- --out-dir "$RUNNER_TEMP/reposhelf-vsix"
       - run: npm audit --audit-level=high

@@ -39,16 +39,22 @@ The provider-neutral visual identity is integrated through:
 - `docs/images/reposhelf-banner.png`: 1600×400 README and Marketplace details
   banner.
 
-Additional listing screenshots remain deferred until release-readiness review.
+Marketplace screenshots are intentionally omitted from the MVP listing because no
+safely sanitized representative GitLab dataset is available. Corporate instances,
+organization trees, repositories, paths, and account data must not be captured or
+published merely to provide screenshots. The provider-neutral icon, banner, clear
+feature descriptions, and accessible text carry the initial listing presentation.
+Screenshots may be reconsidered only if a fully synthetic isolated dataset becomes
+available after the MVP release.
 
 ## Metadata tracking
 
-| Field                 | Value/status                       |
-| --------------------- | ---------------------------------- |
-| Extension ID          | `chiefwizard.reposhelf`            |
-| Package name          | `reposhelf`                        |
-| Source repository     | `jwhitten37-dev/RepoShelf`         |
-| License               | Apache-2.0                         |
-| Marketplace publisher | `chiefwizard` (confirmed)          |
-| Telemetry             | None                               |
-| Release status        | Pre-release; Phase 4 not yet begun |
+| Field                 | Value/status                     |
+| --------------------- | -------------------------------- |
+| Extension ID          | `chiefwizard.reposhelf`          |
+| Package name          | `reposhelf`                      |
+| Source repository     | `jwhitten37-dev/RepoShelf`       |
+| License               | Apache-2.0                       |
+| Marketplace publisher | `chiefwizard` (confirmed)        |
+| Telemetry             | None                             |
+| Release status        | Pre-release; Phase 7 preparation |

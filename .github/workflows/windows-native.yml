@@ -42,17 +42,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $version = node -p "require('./package.json').version"
-          $vsix = Join-Path $env:RUNNER_TEMP "reposhelf-$version-windows-candidate.vsix"
-          npm exec -- vsce package --out $vsix --no-yarn --pre-release
-          if ($LASTEXITCODE -ne 0) { throw "VSIX packaging failed." }
-
           $artifact = Join-Path $env:RUNNER_TEMP "reposhelf-windows-native"
           New-Item -ItemType Directory -Path $artifact -Force | Out-Null
-          Copy-Item $vsix $artifact
-          Get-FileHash -Algorithm SHA256 $vsix |
-            Format-List Algorithm, Hash, Path |
-            Out-File (Join-Path $artifact "vsix-sha256.txt") -Encoding utf8
+          npm run package:vsix -- --out-dir $artifact
+          if ($LASTEXITCODE -ne 0) { throw "VSIX packaging or validation failed." }
 
           $metadata = @(
             "# RepoShelf Windows native workflow evidence"
@@ -67,6 +60,7 @@ jobs:
             "- Filesystem: ``$((Get-Volume -DriveLetter ($env:SystemDrive).TrimEnd(':')).FileSystem)``"
             "- Workflow run: ``$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID``"
             ""
+            "The JSON evidence file records the reviewed VSIX contents and SHA-256."
             "This artifact proves the portable quality gate and packaging ran on a"
             "native Windows runner. It does not replace the manual Extension"
             "Development Host matrix in docs/phase-4.1/WINDOWS-ADVERSARIAL-GATE.md."
