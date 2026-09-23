@@ -120,6 +120,7 @@ Provisional names are:
   "reposhelf.remoteDocumentMode": "pinnedCommit",
   "reposhelf.cleanup.confirmAlways": true,
   "reposhelf.api.timeoutMs": 30000,
+  "reposhelf.api.maxGetRetries": 2,
   "reposhelf.cache.maxFileBytes": 5242880,
   "reposhelf.cache.maxTotalBytes": 52428800
 }

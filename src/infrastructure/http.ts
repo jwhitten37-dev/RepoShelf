@@ -17,19 +17,29 @@ export interface GitLabHttpClientOptions {
   readonly baseUrl: string;
   readonly token: string;
   readonly timeoutMs: number;
+  readonly maxGetRetries?: number;
   readonly fetch?: FetchLike;
+  readonly sleep?: (
+    milliseconds: number,
+    signal?: AbortSignal,
+  ) => Promise<void>;
 }
 
 export class GitLabHttpClient {
   private readonly apiBaseUrl: URL;
   private readonly expectedOrigin: string;
   private readonly fetchImplementation: FetchLike;
+  private readonly sleepImplementation: (
+    milliseconds: number,
+    signal?: AbortSignal,
+  ) => Promise<void>;
 
   public constructor(private readonly options: GitLabHttpClientOptions) {
     const normalizedBase = new URL(`${options.baseUrl.replace(/\/+$/u, "")}/`);
     this.apiBaseUrl = new URL("api/v4/", normalizedBase);
     this.expectedOrigin = normalizedBase.origin;
     this.fetchImplementation = options.fetch ?? fetch;
+    this.sleepImplementation = options.sleep ?? abortableSleep;
   }
 
   public async get(
@@ -112,6 +122,32 @@ export class GitLabHttpClient {
       readonly redirectCount: number;
     },
   ): Promise<HttpResponse> {
+    const retries =
+      options.method === "GET"
+        ? Math.min(3, Math.max(0, this.options.maxGetRetries ?? 0))
+        : 0;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.requestAttempt(url, options);
+      } catch (error) {
+        if (!isRetryableGetError(error) || attempt >= retries) throw error;
+        await this.sleepImplementation(
+          retryDelayMs(error, attempt),
+          options.signal,
+        );
+      }
+    }
+  }
+
+  private async requestAttempt(
+    url: URL,
+    options: {
+      readonly method: "GET" | "POST";
+      readonly body?: string;
+      readonly signal?: AbortSignal;
+      readonly redirectCount: number;
+    },
+  ): Promise<HttpResponse> {
     this.assertAllowedApiUrl(url);
     if (options.signal?.aborted === true) {
       throw new GitLabError("cancelled", "Request cancelled.");
@@ -164,14 +200,14 @@ export class GitLabHttpClient {
         }
         const redirectUrl = new URL(location, url);
         this.assertAllowedApiUrl(redirectUrl);
-        return this.request(redirectUrl, {
+        return this.requestAttempt(redirectUrl, {
           ...options,
           redirectCount: options.redirectCount + 1,
         });
       }
 
       if (!response.ok) {
-        throw mapHttpStatus(response.status);
+        throw mapHttpStatus(response);
       }
       return response;
     } catch (error) {
@@ -199,7 +235,8 @@ function combineSignals(
     : AbortSignal.any([external, timeout]);
 }
 
-function mapHttpStatus(status: number): GitLabError {
+function mapHttpStatus(response: Response): GitLabError {
+  const { status } = response;
   if (status === 401)
     return new GitLabError("authentication", "GitLab rejected the token.", {
       status,
@@ -219,11 +256,63 @@ function mapHttpStatus(status: number): GitLabError {
   if (status === 429)
     return new GitLabError("rateLimited", "GitLab rate limit reached.", {
       status,
+      ...retryAfterOptions(response),
     });
   if (status >= 500)
-    return new GitLabError("server", "GitLab server error.", { status });
+    return new GitLabError("server", "GitLab server error.", {
+      status,
+      ...retryAfterOptions(response),
+    });
   return new GitLabError("invalidResponse", `GitLab returned HTTP ${status}.`, {
     status,
+  });
+}
+
+function retryAfterOptions(
+  response: Response,
+): { readonly retryAfterMs: number } | Record<string, never> {
+  const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
+  return retryAfterMs === undefined ? {} : { retryAfterMs };
+}
+
+function isRetryableGetError(error: unknown): error is GitLabError {
+  return (
+    error instanceof GitLabError &&
+    ["network", "rateLimited", "server", "timeout"].includes(error.code)
+  );
+}
+
+function retryDelayMs(error: GitLabError, attempt: number): number {
+  return error.retryAfterMs ?? Math.min(2_000, 250 * 2 ** attempt);
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const seconds = Number(value.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(30_000, Math.ceil(seconds * 1_000));
+  }
+  const date = Date.parse(value);
+  if (!Number.isFinite(date)) return undefined;
+  return Math.min(30_000, Math.max(0, date - Date.now()));
+}
+
+function abortableSleep(
+  milliseconds: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted === true)
+    return Promise.reject(new GitLabError("cancelled", "Request cancelled."));
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timeout);
+      reject(new GitLabError("cancelled", "Request cancelled."));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 

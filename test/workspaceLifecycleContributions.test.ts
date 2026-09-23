@@ -156,4 +156,14 @@ describe("Phase 4.1C lifecycle contributions", () => {
     expect(inactive).toMatchObject({ default: 30, minimum: 1, maximum: 3650 });
     expect(inactive?.description).toContain("never cause automatic");
   });
+
+  it("bounds Phase 6 automatic retries to idempotent GET requests", () => {
+    const retries =
+      manifest.contributes.configuration.properties[
+        "reposhelf.api.maxGetRetries"
+      ];
+    expect(retries).toMatchObject({ default: 2, minimum: 0, maximum: 3 });
+    expect(retries?.description).toContain("GET");
+    expect(retries?.description).toContain("writes are never retried");
+  });
 });

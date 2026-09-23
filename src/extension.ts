@@ -41,8 +41,10 @@ export async function activate(
   const logger = new OutputChannelLogger(output);
   const instances = new InstanceService();
   const tokens = new VsCodeTokenStore(context.secrets);
-  const clients = new DefaultClientFactory(tokens, () =>
-    instances.getTimeoutMs(),
+  const clients = new DefaultClientFactory(
+    tokens,
+    () => instances.getTimeoutMs(),
+    () => instances.getMaxGetRetries(),
   );
   const refs = new RefStore(context.globalState);
   const legacyWorkspaceRegistry = new VsCodeWorkspaceRegistry(

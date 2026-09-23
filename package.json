@@ -399,6 +399,14 @@
           "scope": "machine-overridable",
           "description": "Timeout in milliseconds for each GitLab API request."
         },
+        "reposhelf.api.maxGetRetries": {
+          "type": "number",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 3,
+          "scope": "machine-overridable",
+          "description": "Maximum automatic retries for transient GitLab GET failures. Remote writes are never retried automatically."
+        },
         "reposhelf.cache.maxFileBytes": {
           "type": "number",
           "default": 5242880,

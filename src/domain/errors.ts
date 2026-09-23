@@ -17,14 +17,16 @@ export class GitLabError extends Error {
   public constructor(
     public readonly code: GitLabErrorCode,
     message: string,
-    options?: { cause?: unknown; status?: number },
+    options?: { cause?: unknown; status?: number; retryAfterMs?: number },
   ) {
     super(message, { cause: options?.cause });
     this.name = "GitLabError";
     this.status = options?.status;
+    this.retryAfterMs = options?.retryAfterMs;
   }
 
   public readonly status: number | undefined;
+  public readonly retryAfterMs: number | undefined;
 }
 
 export function toUserMessage(error: unknown): string {

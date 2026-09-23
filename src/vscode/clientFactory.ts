@@ -13,6 +13,7 @@ export class DefaultClientFactory implements ClientFactory {
   public constructor(
     private readonly tokens: TokenStore,
     private readonly getTimeoutMs: () => number,
+    private readonly getMaxGetRetries: () => number,
   ) {}
 
   public async create(instance: GitLabInstance): Promise<CatalogClient> {
@@ -35,6 +36,7 @@ export class DefaultClientFactory implements ClientFactory {
         baseUrl: instance.baseUrl,
         token,
         timeoutMs: this.getTimeoutMs(),
+        maxGetRetries: this.getMaxGetRetries(),
       }),
     );
   }

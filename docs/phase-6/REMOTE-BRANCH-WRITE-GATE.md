@@ -28,7 +28,8 @@ GET-only.
    overwrites or force-updates a ref.
 4. The authenticated JSON POST is sent once. It receives no automatic retry and
    no redirect replay. Credentials remain subject to the existing exact-origin
-   and API-path boundary.
+   and API-path boundary. Phase 6 transient retry policy applies only to GET and
+   cannot replay this POST.
 5. Authentication, authorization, not-found, and deterministic client-response
    errors are reported without pretending success.
 6. Timeout, cancellation after dispatch, network failure, rate limiting, server

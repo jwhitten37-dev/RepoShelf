@@ -32,6 +32,13 @@ export class InstanceService {
     return Math.min(120_000, Math.max(1_000, value));
   }
 
+  public getMaxGetRetries(): number {
+    const value = vscode.workspace
+      .getConfiguration(CONFIGURATION_SECTION)
+      .get<number>("api.maxGetRetries", 2);
+    return Math.min(3, Math.max(0, Math.trunc(value)));
+  }
+
   public getMaxFileCacheBytes(): number {
     const value = vscode.workspace
       .getConfiguration(CONFIGURATION_SECTION)

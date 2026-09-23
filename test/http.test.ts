@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GitLabError } from "../src/domain/errors.js";
+import { GitLabError } from "../src/domain/errors.js";
 import {
   GitLabHttpClient,
   type FetchLike,
@@ -134,6 +134,146 @@ describe("GitLabHttpClient", () => {
       ),
     ).rejects.toMatchObject({ code: "cancelled" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retries transient GET failures with bounded exponential delays", async () => {
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockRejectedValueOnce(new TypeError("network unavailable"))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(jsonResponse({ id: 1 }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 2,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await expect(client.get("user")).resolves.toBeDefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 250, undefined);
+    expect(sleep).toHaveBeenNthCalledWith(2, 500, undefined);
+  });
+
+  it("honors and caps Retry-After for retryable GET responses", async () => {
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 429,
+          headers: { "retry-after": "120" },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: 1 }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 1,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await client.get("user");
+
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(30_000, undefined);
+  });
+
+  it("stops GET retries at the configured bound", async () => {
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(new Response(null, { status: 503 }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 2,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await expect(client.get("user")).rejects.toMatchObject({ code: "server" });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403, 404])(
+    "does not retry deterministic HTTP %i GET failures",
+    async (status) => {
+      const fetchMock = vi
+        .fn<FetchLike>()
+        .mockResolvedValue(new Response(null, { status }));
+      const sleep = vi.fn().mockResolvedValue(undefined);
+      const client = new GitLabHttpClient({
+        baseUrl: BASE_URL,
+        token: "secret",
+        timeoutMs: 1000,
+        maxGetRetries: 3,
+        fetch: fetchMock,
+        sleep,
+      });
+
+      await expect(client.get("user")).rejects.toBeDefined();
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(sleep).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stops before redispatch when cancellation wins during GET backoff", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(new Response(null, { status: 503 }));
+    const sleep = vi.fn().mockImplementation(() => {
+      controller.abort();
+      return Promise.reject(new GitLabError("cancelled", "Request cancelled."));
+    });
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 3,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await expect(
+      client.get("user", {}, controller.signal),
+    ).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("never retries POST when GET retries are enabled", async () => {
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(new Response(null, { status: 503 }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 3,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await expect(
+      client.postJson("projects/42/repository/branches", {
+        branch: "feature/new",
+        ref: "a".repeat(40),
+      }),
+    ).rejects.toMatchObject({ code: "server" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("rejects a cross-origin redirect before forwarding credentials", async () => {

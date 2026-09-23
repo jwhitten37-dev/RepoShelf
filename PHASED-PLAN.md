@@ -693,6 +693,10 @@ is [`docs/phase-6/REMOTE-BRANCH-WRITE-GATE.md`](./docs/phase-6/REMOTE-BRANCH-WRI
   workspaces.
 - Corporate CA/proxy support through documented and approved configuration paths.
 - Configurable API timeouts, retries, exponential backoff, and rate-limit handling.
+  **GET retry slice complete:** transient GET network/timeout/429/5xx failures use
+  at most three configurable, cancellation-aware retries with bounded
+  `Retry-After` or exponential delays. POST writes remain single-dispatch and are
+  never retried automatically.
 - Optional offline source behavior only if a persistent-cache security design
   is approved; otherwise retain memory-only source content and document that
   offline source browsing is unavailable.
