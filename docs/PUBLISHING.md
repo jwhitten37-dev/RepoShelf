@@ -23,6 +23,13 @@ uses that service connection through `AzureCLI@2` and publishes with:
 vsce publish --packagePath <validated-vsix> --azure-credential
 ```
 
+Marketplace membership must reference the workload identity's Azure DevOps
+**profile ID**, not its Entra object ID, application/client ID, or resource ID.
+Confirm the binding with `vsce verify-pat chiefwizard --azure-credential` from
+the service connection's authenticated context before publishing. Despite the
+command's legacy name, `--azure-credential` verifies the Entra principal without
+using a PAT.
+
 Never add a PAT, client secret, certificate, federated token, service-connection
 identifier, tenant identifier, subscription identifier, or managed-identity
 resource ID to this repository.

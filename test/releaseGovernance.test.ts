@@ -40,25 +40,6 @@ describe("Phase 7 release governance", () => {
     ).toBeLessThan(pipeline.indexOf("npm exec -- vsce publish"));
   });
 
-  it("isolates the temporary Marketplace identity diagnostic from publication", () => {
-    const diagnostic = pipeline.slice(
-      pipeline.indexOf("- stage: DiagnoseMarketplaceIdentity"),
-    );
-    expect(diagnostic).toContain(
-      "eq(variables['Build.SourceBranch'], 'refs/heads/main')",
-    );
-    expect(diagnostic).toContain(
-      "https://app.vssps.visualstudio.com/_apis/profile/profiles/me",
-    );
-    expect(diagnostic).toContain("Marketplace profile ID:");
-    expect(diagnostic).toContain(
-      "npm exec -- vsce verify-pat chiefwizard --azure-credential",
-    );
-    expect(diagnostic).not.toContain("vsce publish");
-    expect(diagnostic).not.toContain("package:vsix");
-    expect(diagnostic).not.toContain("DownloadPipelineArtifact");
-  });
-
   it("defines stable promotion, publisher recovery, and fix-forward rollback", () => {
     expect(governance).toContain("Stable promotion requires");
     expect(governance).toContain("phishing-resistant MFA");
