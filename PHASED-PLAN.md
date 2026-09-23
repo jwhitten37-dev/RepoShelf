@@ -770,8 +770,17 @@ release blockers unless separately promoted into scope.
   environment-specific smoke validation remain manual release gates.
 - Define release signing/provenance, changelog, versioning, rollback, and
   publisher-account security procedures.
+  **Phase 7.3 governance implementation complete:** the release gate defines
+  Marketplace signing boundaries, immutable SHA-256 provenance, semantic version
+  and changelog rules, pre-release/stable promotion, rollback/deprecation,
+  publisher recovery, and incident response. Publication revalidates downloaded
+  evidence immediately before publishing.
 - Publish only after security review, dependency audit, license review, and all
   manual gates pass without retaining private environment data.
+  **Phase 7.3 license implementation complete:** the locked dependency graph is
+  checked against a fail-closed license policy in every standard validation run.
+  The development-only `@vscode/vsce-sign*` terms are narrowly reviewed for use
+  with Marketplace tooling and those packages remain excluded from the VSIX.
 
 ## Build order
 

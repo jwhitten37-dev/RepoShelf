@@ -4,6 +4,10 @@ RepoShelf's Visual Studio Marketplace identity is `chiefwizard.reposhelf`. The
 source repository remains `jwhitten37-dev/RepoShelf`; the Marketplace publisher
 and GitHub owner are independent identities.
 
+The normative versioning, provenance, signing-boundary, license, publisher
+recovery, and rollback controls are in the
+[Phase 7.3 release governance gate](./phase-7/RELEASE-GOVERNANCE-GATE.md).
+
 ## Authentication
 
 Publishing uses Microsoft Entra ID workload identity federation and a
@@ -29,8 +33,8 @@ resource ID to this repository.
 
 1. Every `main` update, pull request, and `v*` tag installs the locked dependency
    graph with Node.js 24.21.0.
-2. Formatting, linting, type checking, all tests, compilation, and a high-severity
-   dependency audit must pass.
+2. Formatting, linting, type checking, the lockfile license policy, all tests,
+   compilation, and a high-severity dependency audit must pass.
 3. The pinned local `@vscode/vsce` packages one VSIX.
 4. `npm run package:vsix -- --out-dir <directory>` creates the candidate through
    the pinned local `@vscode/vsce`, validates the payload and final archive against
@@ -41,8 +45,9 @@ resource ID to this repository.
    byte size, and SHA-256; it contains no environment dump or credentials.
 6. Only a `v*` tag can enter the publishing stage. The tag must exactly equal
    `v<package.json version>` and identify a commit contained in `origin/main`.
-7. The publishing stage downloads and publishes that exact VSIX without
-   rebuilding it.
+7. The publishing stage downloads that exact VSIX without rebuilding it,
+   independently compares its identity and SHA-256 with the retained evidence,
+   and only then publishes it.
 
 Ordinary `main` and pull-request builds never publish.
 
@@ -90,3 +95,15 @@ reviewed release is approved:
 Do not reuse a released version number. If publication fails after the version is
 accepted by Marketplace, diagnose the existing version before creating a new
 release commit and tag.
+
+## Failure after publication
+
+Published Marketplace versions and their source tags are immutable. Stop further
+approvals, preserve sanitized release evidence, and use Marketplace
+unpublish/deprecation controls only after reviewing the effect on installed users.
+Remediation is a new reviewed SemVer version; do not overwrite an artifact, move a
+tag, reuse a version, or claim that Marketplace can force-downgrade installations.
+For suspected publisher compromise, disable the service connection and federated
+credential, remove untrusted publisher access, revoke sessions, and suspend tag
+and environment approval before investigation. Follow the full incident procedure
+in the Phase 7.3 gate.

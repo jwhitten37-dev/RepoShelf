@@ -119,10 +119,26 @@ stages:
                       set -euo pipefail
 
                       mapfile -t vsix_files < <(find "$(Pipeline.Workspace)/$(vsixArtifactName)" -maxdepth 1 -type f -name '*.vsix' -print)
+                      mapfile -t evidence_files < <(find "$(Pipeline.Workspace)/$(vsixArtifactName)" -maxdepth 1 -type f -name '*.evidence.json' -print)
                       if [[ "${#vsix_files[@]}" -ne 1 ]]; then
                         echo "Expected exactly one validated VSIX artifact; found ${#vsix_files[@]}." >&2
                         exit 1
                       fi
+                      if [[ "${#evidence_files[@]}" -ne 1 ]]; then
+                        echo "Expected exactly one package evidence file; found ${#evidence_files[@]}." >&2
+                        exit 1
+                      fi
+
+                      VSIX_PATH="${vsix_files[0]}" EVIDENCE_PATH="${evidence_files[0]}" node <<'NODE'
+                      const { createHash } = require("node:crypto");
+                      const { readFileSync } = require("node:fs");
+                      const vsix = readFileSync(process.env.VSIX_PATH);
+                      const evidence = JSON.parse(readFileSync(process.env.EVIDENCE_PATH, "utf8"));
+                      const actual = createHash("sha256").update(vsix).digest("hex");
+                      if (evidence.extensionId !== "chiefwizard.reposhelf" || evidence.vsix.sha256 !== actual) {
+                        throw new Error("Downloaded VSIX does not match its validated identity and SHA-256 evidence.");
+                      }
+                      NODE
 
                       npm exec -- vsce publish \
                         --packagePath "${vsix_files[0]}" \
