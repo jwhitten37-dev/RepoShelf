@@ -26,6 +26,14 @@ export class NativeGitRunner implements GitRunner {
     args: readonly string[],
     options: GitRunOptions = {},
   ): Promise<GitResult> {
+    if (isTruthy(process.env.GIT_SSL_NO_VERIFY)) {
+      return Promise.reject(
+        new GitLabError(
+          "configuration",
+          "RepoShelf refuses native Git operations while GIT_SSL_NO_VERIFY disables TLS certificate verification.",
+        ),
+      );
+    }
     if (options.signal?.aborted === true) {
       return Promise.reject(
         new GitLabError("cancelled", "Git operation cancelled."),
@@ -130,6 +138,10 @@ export class NativeGitRunner implements GitRunner {
       else child.stdin.end();
     });
   }
+}
+
+function isTruthy(value: string | undefined): boolean {
+  return value !== undefined && /^(?:1|true|yes|on)$/iu.test(value.trim());
 }
 
 function appendBounded(

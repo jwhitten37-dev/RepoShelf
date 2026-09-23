@@ -209,6 +209,9 @@ scenarios, and evidence requirements are in the
 - Multiple instances are enabled without breaking prior identifiers/storage.
 - Timeout, retry/backoff, rate-limit, proxy, CA, and authorization behavior is
   documented and tested where locally reproducible.
+- Corporate CA/proxy automated controls and the remaining Windows/WSL manual
+  matrix are authoritative in
+  [`../phase-6/CORPORATE-NETWORK-GATE.md`](../phase-6/CORPORATE-NETWORK-GATE.md).
 - Telemetry remains disabled unless explicitly approved.
 - Persistent offline source cache remains disabled unless its security design
   is approved; the product clearly states the resulting offline capability.

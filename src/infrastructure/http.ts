@@ -35,6 +35,7 @@ export class GitLabHttpClient {
   ) => Promise<void>;
 
   public constructor(private readonly options: GitLabHttpClientOptions) {
+    assertSecureNodeTlsEnvironment();
     const normalizedBase = new URL(`${options.baseUrl.replace(/\/+$/u, "")}/`);
     this.apiBaseUrl = new URL("api/v4/", normalizedBase);
     this.expectedOrigin = normalizedBase.origin;
@@ -245,6 +246,12 @@ function mapHttpStatus(response: Response): GitLabError {
     return new GitLabError("authorization", "GitLab denied this operation.", {
       status,
     });
+  if (status === 407)
+    return new GitLabError(
+      "proxyAuthentication",
+      "The configured proxy rejected authentication.",
+      { status },
+    );
   if (status === 409)
     return new GitLabError("conflict", "GitLab reported a conflicting ref.", {
       status,
@@ -327,16 +334,19 @@ function mapFetchError(
   if (timedOut)
     return new GitLabError("timeout", "Request timed out.", { cause: error });
 
-  const cause = error instanceof Error ? error.cause : undefined;
-  const code =
-    isRecord(cause) && typeof cause.code === "string" ? cause.code : "";
+  const codes = collectErrorCodes(error);
   if (
     [
+      "CERT_NOT_YET_VALID",
       "CERT_HAS_EXPIRED",
+      "CERT_SIGNATURE_FAILURE",
       "DEPTH_ZERO_SELF_SIGNED_CERT",
+      "ERR_TLS_CERT_ALTNAME_INVALID",
       "SELF_SIGNED_CERT_IN_CHAIN",
+      "UNABLE_TO_GET_ISSUER_CERT",
+      "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
       "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
-    ].includes(code)
+    ].some((code) => codes.has(code))
   ) {
     return new GitLabError("tls", "TLS certificate validation failed.", {
       cause: error,
@@ -345,6 +355,25 @@ function mapFetchError(
   return new GitLabError("network", "Network request failed.", {
     cause: error,
   });
+}
+
+function collectErrorCodes(error: unknown): ReadonlySet<string> {
+  const codes = new Set<string>();
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && isRecord(current); depth += 1) {
+    if (typeof current.code === "string") codes.add(current.code);
+    current = current.cause;
+  }
+  return codes;
+}
+
+function assertSecureNodeTlsEnvironment(): void {
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    throw new GitLabError(
+      "configuration",
+      "RepoShelf refuses API requests while NODE_TLS_REJECT_UNAUTHORIZED=0 disables TLS certificate verification.",
+    );
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

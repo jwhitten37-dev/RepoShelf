@@ -51,6 +51,14 @@ const extensionSource = readFileSync(
   path.join(root, "src", "extension.ts"),
   "utf8",
 );
+const httpSource = readFileSync(
+  path.join(root, "src", "infrastructure", "http.ts"),
+  "utf8",
+);
+const gitRunnerSource = readFileSync(
+  path.join(root, "src", "infrastructure", "gitRunner.ts"),
+  "utf8",
+);
 
 describe("Phase 4.1C lifecycle contributions", () => {
   it("uses current Marketplace categories", () => {
@@ -165,5 +173,17 @@ describe("Phase 4.1C lifecycle contributions", () => {
     expect(retries).toMatchObject({ default: 2, minimum: 0, maximum: 3 });
     expect(retries?.description).toContain("GET");
     expect(retries?.description).toContain("writes are never retried");
+  });
+
+  it("provides no insecure TLS or proxy credential setting", () => {
+    const configuration = JSON.stringify(
+      manifest.contributes.configuration.properties,
+    );
+    expect(configuration).not.toMatch(
+      /rejectUnauthorized|NODE_TLS_REJECT_UNAUTHORIZED|GIT_SSL_NO_VERIFY|proxyPassword|proxyAuthorization/iu,
+    );
+    expect(httpSource).not.toContain("rejectUnauthorized: false");
+    expect(httpSource).toContain('NODE_TLS_REJECT_UNAUTHORIZED === "0"');
+    expect(gitRunnerSource).toContain("process.env.GIT_SSL_NO_VERIFY");
   });
 });

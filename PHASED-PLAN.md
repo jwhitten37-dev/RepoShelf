@@ -692,6 +692,10 @@ is [`docs/phase-6/REMOTE-BRANCH-WRITE-GATE.md`](./docs/phase-6/REMOTE-BRANCH-WRI
   deletes only the selected instance configuration and PAT while retaining managed
   workspaces.
 - Corporate CA/proxy support through documented and approved configuration paths.
+  **Local implementation complete; manual gate remains:** TLS/proxy diagnostics,
+  proxy credential redaction, insecure-environment refusal, separate API/native-Git
+  guidance, and the Windows/WSL matrix are in
+  [`docs/phase-6/CORPORATE-NETWORK-GATE.md`](./docs/phase-6/CORPORATE-NETWORK-GATE.md).
 - Configurable API timeouts, retries, exponential backoff, and rate-limit handling.
   **GET retry slice complete:** transient GET network/timeout/429/5xx failures use
   at most three configurable, cancellation-aware retries with bounded

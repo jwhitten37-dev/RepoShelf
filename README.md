@@ -39,6 +39,10 @@ implementation records for [Phase 1](./docs/phase-1/README.md),
 [Phase 4](./docs/phase-4/README.md), and planned
 [Phase 4.1](./docs/phase-4.1/README.md).
 
+Corporate CA and proxy setup has separate extension-host and native-Git paths.
+See the [Phase 6 corporate network gate](./docs/phase-6/CORPORATE-NETWORK-GATE.md)
+before organizational use; RepoShelf never requires disabling TLS verification.
+
 ## Safety and privacy
 
 - RepoShelf does not collect telemetry.

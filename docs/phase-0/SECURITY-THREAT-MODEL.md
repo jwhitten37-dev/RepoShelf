@@ -47,6 +47,8 @@
 | External process interference      | Fresh Git/filesystem checks; bounded handle failure; do not kill processes or force deletion                  |
 | Unintended remote ref write        | Explicit no-match action and confirmation; exact-SHA source; collision preflight; create-only endpoint        |
 | Duplicate/ambiguous remote write   | Send POST once; never replay redirects/retry automatically; exact GET reconciliation; report uncertainty      |
+| Proxy/CA misconfiguration          | Approved startup/host paths only; no custom credential store; classify TLS/407; redact proxy credentials      |
+| Inherited TLS verification bypass  | Refuse `NODE_TLS_REJECT_UNAUTHORIZED=0` and truthy `GIT_SSL_NO_VERIFY`; no insecure extension setting         |
 
 ## Token policy
 
@@ -105,3 +107,6 @@ is metadata-only or unavailable and clearly communicated.
 - Phase 6A remote branch creation must satisfy
   [`../phase-6/REMOTE-BRANCH-WRITE-GATE.md`](../phase-6/REMOTE-BRANCH-WRITE-GATE.md)
   before organizational use.
+- Corporate CA/proxy use must satisfy
+  [`../phase-6/CORPORATE-NETWORK-GATE.md`](../phase-6/CORPORATE-NETWORK-GATE.md)
+  on native Windows and Remote–WSL before organizational use.

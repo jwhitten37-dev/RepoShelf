@@ -40,4 +40,17 @@ describe("NativeGitRunner", () => {
       ]),
     ).rejects.toThrow("output exceeded");
   });
+
+  it("fails closed when inherited Git TLS verification is disabled", async () => {
+    const original = process.env.GIT_SSL_NO_VERIFY;
+    process.env.GIT_SSL_NO_VERIFY = "true";
+    try {
+      await expect(
+        new NativeGitRunner().run(["--version"]),
+      ).rejects.toMatchObject({ code: "configuration" });
+    } finally {
+      if (original === undefined) delete process.env.GIT_SSL_NO_VERIFY;
+      else process.env.GIT_SSL_NO_VERIFY = original;
+    }
+  });
 });

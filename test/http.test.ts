@@ -336,6 +336,78 @@ describe("GitLabHttpClient", () => {
     });
     await expect(client.get("user")).rejects.toMatchObject({ code });
   });
+
+  it("maps proxy authentication rejection without retrying", async () => {
+    const fetchMock = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(new Response(null, { status: 407 }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 3,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await expect(client.get("user")).rejects.toMatchObject({
+      code: "proxyAuthentication",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "CERT_NOT_YET_VALID",
+    "CERT_HAS_EXPIRED",
+    "CERT_SIGNATURE_FAILURE",
+    "DEPTH_ZERO_SELF_SIGNED_CERT",
+    "ERR_TLS_CERT_ALTNAME_INVALID",
+    "SELF_SIGNED_CERT_IN_CHAIN",
+    "UNABLE_TO_GET_ISSUER_CERT",
+    "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  ])("maps nested TLS error code %s without retrying", async (code) => {
+    const fetchMock = vi.fn<FetchLike>().mockRejectedValue(
+      new TypeError("fetch failed", {
+        cause: new Error("TLS failed", { cause: { code } }),
+      }),
+    );
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new GitLabHttpClient({
+      baseUrl: BASE_URL,
+      token: "secret",
+      timeoutMs: 1000,
+      maxGetRetries: 3,
+      fetch: fetchMock,
+      sleep,
+    });
+
+    await expect(client.get("user")).rejects.toMatchObject({ code: "tls" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("refuses API clients when Node TLS verification is disabled", () => {
+    const original = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    try {
+      expect(
+        () =>
+          new GitLabHttpClient({
+            baseUrl: BASE_URL,
+            token: "secret",
+            timeoutMs: 1000,
+            fetch: vi.fn<FetchLike>(),
+          }),
+      ).toThrow("refuses API requests");
+    } finally {
+      if (original === undefined)
+        delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      else process.env.NODE_TLS_REJECT_UNAUTHORIZED = original;
+    }
+  });
 });
 
 function jsonResponse(

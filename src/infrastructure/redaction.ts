@@ -1,5 +1,5 @@
 const SENSITIVE_KEY_PATTERN =
-  /^(?:private-token|authorization|cookie|set-cookie|token|password)$/iu;
+  /^(?:private-token|authorization|proxy[-_]?authorization|cookie|set-cookie|token|password|proxy[-_]?password)$/iu;
 const TOKEN_VALUE_PATTERN =
   /\b(?:glpat|glcbt|gldt|glrt|glsoat|glagent)-[A-Za-z0-9_-]+\b/gu;
 
@@ -7,7 +7,7 @@ export function redactText(value: string): string {
   return value
     .replace(TOKEN_VALUE_PATTERN, "[REDACTED]")
     .replace(
-      /((?:PRIVATE-TOKEN|Authorization|Cookie|Set-Cookie)\s*[:=]\s*)[^\s,;]+/giu,
+      /((?:PRIVATE-TOKEN|Authorization|Proxy-Authorization|Cookie|Set-Cookie)\s*[:=]\s*)[^\s,;]+/giu,
       "$1[REDACTED]",
     )
     .replace(/(https?:\/\/)[^/@\s]+@/giu, "$1[REDACTED]@");

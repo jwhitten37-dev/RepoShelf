@@ -3,6 +3,7 @@ export type GitLabErrorCode =
   | "configuration"
   | "authentication"
   | "authorization"
+  | "proxyAuthentication"
   | "conflict"
   | "notFound"
   | "rateLimited"
@@ -41,6 +42,8 @@ export function toUserMessage(error: unknown): string {
       "GitLab rejected the token. Verify that it is current and try again.",
     authorization:
       "The token is valid but does not have permission for this operation.",
+    proxyAuthentication:
+      "The corporate proxy rejected authentication. Verify the approved host proxy configuration without entering proxy credentials into RepoShelf.",
     conflict: error.message,
     notFound: "The requested GitLab resource was not found.",
     rateLimited: "GitLab rate-limited the request. Wait and try again.",
