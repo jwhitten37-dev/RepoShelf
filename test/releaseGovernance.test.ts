@@ -32,6 +32,12 @@ describe("Phase 7 release governance", () => {
     expect(pipeline.indexOf("evidence.vsix.sha256 !== actual")).toBeLessThan(
       pipeline.indexOf("npm exec -- vsce publish"),
     );
+    expect(pipeline).toContain(
+      "npm exec -- vsce verify-pat chiefwizard --azure-credential",
+    );
+    expect(
+      pipeline.indexOf("npm exec -- vsce verify-pat chiefwizard"),
+    ).toBeLessThan(pipeline.indexOf("npm exec -- vsce publish"));
   });
 
   it("defines stable promotion, publisher recovery, and fix-forward rollback", () => {

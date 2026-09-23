@@ -140,6 +140,8 @@ stages:
                       }
                       NODE
 
+                      npm exec -- vsce verify-pat chiefwizard --azure-credential
+
                       npm exec -- vsce publish \
                         --packagePath "${vsix_files[0]}" \
                         --azure-credential \

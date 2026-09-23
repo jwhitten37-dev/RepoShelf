@@ -47,7 +47,8 @@ resource ID to this repository.
    `v<package.json version>` and identify a commit contained in `origin/main`.
 7. The publishing stage downloads that exact VSIX without rebuilding it,
    independently compares its identity and SHA-256 with the retained evidence,
-   and only then publishes it.
+   verifies that the current Entra principal has a role on the `chiefwizard`
+   publisher, and only then publishes it.
 
 Ordinary `main` and pull-request builds never publish.
 
