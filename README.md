@@ -17,8 +17,8 @@ the product identity and architecture remain provider-neutral.
 
 ## Current capabilities
 
-- Connect to one self-managed GitLab instance with a PAT stored in VS Code
-  `SecretStorage`.
+- Connect to multiple GitLab instances, each with an independently stored PAT in
+  VS Code `SecretStorage`.
 - Browse groups, projects, branches, and repository trees lazily.
 - Open immutable, read-only remote files pinned to a full commit SHA.
 - Compare a pinned file with the same path on another branch.

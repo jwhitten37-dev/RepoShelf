@@ -130,11 +130,10 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
   }
 
   public async searchProjects(
+    instance: GitLabInstance,
     search: string,
     signal?: AbortSignal,
   ): Promise<readonly ProjectNode[]> {
-    const instance = this.instances.getEnabledInstance();
-    if (instance === undefined) return [];
     return (
       await (await this.getClient(instance)).searchProjects(search, signal)
     ).map((project) => ({ type: "project" as const, instance, project }));
@@ -318,8 +317,9 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
             ...this.projectSearch.nodes,
           ];
         }
-        const instance = this.instances.getEnabledInstance();
-        return instance === undefined ? [] : [{ type: "instance", instance }];
+        return this.instances
+          .getEnabledInstances()
+          .map((instance) => ({ type: "instance" as const, instance }));
       }
       switch (node.type) {
         case "instance":

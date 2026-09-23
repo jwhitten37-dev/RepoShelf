@@ -685,7 +685,12 @@ is [`docs/phase-6/REMOTE-BRANCH-WRITE-GATE.md`](./docs/phase-6/REMOTE-BRANCH-WRI
 #### Later Phase 6 slices
 
 - OAuth authorization-code flow as an alternative to PATs, if GitLab admins approve an OAuth application.
-- Multi-instance support, such as corporate GitLab plus GitLab.com.
+- Multi-instance support, such as corporate GitLab plus GitLab.com. **Complete:**
+  existing UUID identities and storage keys remain compatible; enabled instances
+  appear as independent catalog roots, search/removal actions are scoped inline to
+  an instance row, Command Palette use selects an instance when needed, and removal
+  deletes only the selected instance configuration and PAT while retaining managed
+  workspaces.
 - Corporate CA/proxy support through documented and approved configuration paths.
 - Configurable API timeouts, retries, exponential backoff, and rate-limit handling.
 - Optional offline source behavior only if a persistent-cache security design

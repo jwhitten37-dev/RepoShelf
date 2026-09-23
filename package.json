@@ -51,6 +51,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "reposhelf.removeInstance",
+        "title": "Remove GitLab Instance",
+        "category": "RepoShelf",
+        "icon": "$(remove)"
+      },
+      {
         "command": "reposhelf.testConnection",
         "title": "Test GitLab Connection",
         "category": "RepoShelf",
@@ -249,12 +255,7 @@
       "view/title": [
         {
           "command": "reposhelf.addInstance",
-          "when": "view == reposhelf.catalog && reposhelf.hasInstance == false",
-          "group": "navigation@1"
-        },
-        {
-          "command": "reposhelf.searchProjects",
-          "when": "view == reposhelf.catalog && reposhelf.hasInstance == true",
+          "when": "view == reposhelf.catalog",
           "group": "navigation@1"
         },
         {
@@ -290,9 +291,19 @@
       ],
       "view/item/context": [
         {
+          "command": "reposhelf.searchProjects",
+          "when": "view == reposhelf.catalog && viewItem == instance",
+          "group": "inline@1"
+        },
+        {
+          "command": "reposhelf.removeInstance",
+          "when": "view == reposhelf.catalog && viewItem == instance",
+          "group": "inline@2"
+        },
+        {
           "command": "reposhelf.refreshCatalog",
           "when": "view == reposhelf.catalog && (viewItem == instance || viewItem == group)",
-          "group": "inline@1"
+          "group": "inline@3"
         },
         {
           "command": "reposhelf.selectBranch",
@@ -338,7 +349,7 @@
           "type": "array",
           "default": [],
           "scope": "machine-overridable",
-          "description": "Configured GitLab instances. Phases 1–5 support one enabled instance.",
+          "description": "Configured GitLab instances. Each instance uses an independent UUID-based identity and SecretStorage PAT.",
           "items": {
             "type": "object",
             "required": [

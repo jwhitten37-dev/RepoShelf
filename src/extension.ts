@@ -145,6 +145,11 @@ export async function activate(
     vscode.commands.registerCommand("reposhelf.addInstance", () =>
       commands.addInstance(),
     ),
+    vscode.commands.registerCommand(
+      "reposhelf.removeInstance",
+      (node: unknown) =>
+        commands.removeInstance(isInstanceNode(node) ? node : undefined),
+    ),
     vscode.commands.registerCommand("reposhelf.testConnection", () =>
       commands.testConnection(),
     ),
@@ -155,9 +160,12 @@ export async function activate(
         commands.refresh(node);
       },
     ),
-    vscode.commands.registerCommand("reposhelf.searchProjects", () => {
-      void commands.searchProjects();
-    }),
+    vscode.commands.registerCommand(
+      "reposhelf.searchProjects",
+      (node: unknown) => {
+        void commands.searchProjects(isInstanceNode(node) ? node : undefined);
+      },
+    ),
     vscode.commands.registerCommand("reposhelf.clearProjectSearch", () => {
       commands.clearProjectSearch();
     }),
@@ -262,6 +270,17 @@ export function deactivate(): void {}
 
 function isProjectNode(value: unknown): value is ProjectNode {
   return isRecord(value) && value.type === "project";
+}
+
+function isInstanceNode(
+  value: unknown,
+): value is Extract<CatalogNode, { readonly type: "instance" }> {
+  return (
+    isRecord(value) &&
+    value.type === "instance" &&
+    isRecord(value.instance) &&
+    typeof value.instance.instanceId === "string"
+  );
 }
 
 function isRepositoryNode(value: unknown): value is RepositoryNode {

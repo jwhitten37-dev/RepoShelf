@@ -9,7 +9,11 @@ import {
 } from "../domain/remoteUri.js";
 import type { Logger } from "../infrastructure/logger.js";
 import type { MaterializationService } from "../infrastructure/materialization.js";
-import type { GitLabBranch, ManagedWorkspaceRecord } from "../domain/models.js";
+import type {
+  GitLabBranch,
+  GitLabInstance,
+  ManagedWorkspaceRecord,
+} from "../domain/models.js";
 import type { TokenStore } from "../infrastructure/secretStore.js";
 import type {
   CatalogNode,
@@ -60,12 +64,6 @@ export class CommandController {
 
   public async addInstance(): Promise<void> {
     try {
-      if (this.instances.getInstances().length > 0) {
-        await vscode.window.showInformationMessage(
-          "Phase 1 supports one configured GitLab instance.",
-        );
-        return;
-      }
       const baseUrl = await vscode.window.showInputBox({
         title: "Add GitLab Instance",
         prompt: "Corporate GitLab base URL",
@@ -130,11 +128,16 @@ export class CommandController {
   }
 
   public async testConnection(): Promise<void> {
-    const instance = this.instances.getEnabledInstance();
-    if (instance === undefined) {
+    const instances = this.instances.getEnabledInstances();
+    if (instances.length === 0) {
       await vscode.window.showWarningMessage("Add a GitLab instance first.");
       return;
     }
+    const instance = await this.chooseInstance(
+      "Test GitLab Connection",
+      instances,
+    );
+    if (instance === undefined) return;
     try {
       const user = await vscode.window.withProgress(
         {
@@ -168,13 +171,18 @@ export class CommandController {
     );
   }
 
-  public async searchProjects(): Promise<void> {
-    if (this.instances.getEnabledInstance() === undefined) {
+  public async searchProjects(node?: CatalogNode): Promise<void> {
+    const instances = this.instances.getEnabledInstances();
+    if (instances.length === 0) {
       await vscode.window.showWarningMessage("Add a GitLab instance first.");
       return;
     }
+    const instance =
+      this.resolveInstanceNode(node, instances) ??
+      (await this.chooseInstance("Search Projects", instances));
+    if (instance === undefined) return;
     const picker = vscode.window.createQuickPick<ProjectPickerItem>();
-    picker.title = "Search RepoShelf Projects";
+    picker.title = `Search Projects — ${instance.label}`;
     picker.placeholder = "Type a project or namespace name";
     picker.matchOnDescription = true;
     picker.matchOnDetail = true;
@@ -208,7 +216,7 @@ export class CommandController {
         timer = setTimeout(() => {
           controller = new AbortController();
           void this.catalog
-            .searchProjects(search, controller.signal)
+            .searchProjects(instance, search, controller.signal)
             .then((nodes) => {
               if (currentGeneration !== generation) return;
               currentNodes = nodes;
@@ -530,6 +538,68 @@ export class CommandController {
       "setContext",
       "reposhelf.hasInstance",
       hasInstance,
+    );
+  }
+
+  public async removeInstance(node?: CatalogNode): Promise<void> {
+    const instances = this.instances.getInstances();
+    const instance =
+      this.resolveInstanceNode(node, instances) ??
+      (await this.chooseInstance("Remove GitLab Instance", instances));
+    if (instance === undefined) return;
+    const confirmed = await vscode.window.showWarningMessage(
+      `Remove ${instance.label} (${new URL(instance.baseUrl).host})? The stored PAT for this instance will also be deleted. Managed local workspaces will be retained.`,
+      { modal: true },
+      "Remove GitLab Instance",
+    );
+    if (confirmed !== "Remove GitLab Instance") return;
+
+    const original = this.instances.getInstances();
+    try {
+      await this.instances.remove(instance.instanceId);
+      try {
+        await this.tokens.delete(instance.instanceId);
+      } catch (error) {
+        await this.instances.saveAll(original);
+        throw error;
+      }
+      await this.updateContext();
+      this.catalog.refresh();
+      this.logger.info(
+        `Removed GitLab instance ${instance.label} (${instance.instanceId})`,
+      );
+      await vscode.window.showInformationMessage(
+        `Removed GitLab instance ${instance.label}. Managed local workspaces were retained.`,
+      );
+    } catch (error) {
+      this.report("Unable to remove the GitLab instance", error);
+    }
+  }
+
+  private async chooseInstance(
+    title: string,
+    instances: readonly GitLabInstance[],
+  ): Promise<GitLabInstance | undefined> {
+    if (instances.length <= 1) return instances[0];
+    const selected = await vscode.window.showQuickPick(
+      instances.map((instance) => ({
+        label: instance.label,
+        description: new URL(instance.baseUrl).host,
+        detail: instance.baseUrl,
+        instance,
+      })),
+      { title, placeHolder: "Select a GitLab instance", ignoreFocusOut: true },
+    );
+    return selected?.instance;
+  }
+
+  private resolveInstanceNode(
+    node: CatalogNode | undefined,
+    instances: readonly GitLabInstance[],
+  ): GitLabInstance | undefined {
+    if (node?.type !== "instance") return undefined;
+    return instances.find(
+      (instance) => instance.instanceId === node.instance.instanceId,
     );
   }
 

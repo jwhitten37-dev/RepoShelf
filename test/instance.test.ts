@@ -41,13 +41,14 @@ describe("parseInstances", () => {
     expect(parseInstances([instance])).toEqual([instance]);
   });
 
-  it("rejects more than one enabled instance", () => {
-    expect(() =>
-      parseInstances([
-        instance,
-        { ...instance, instanceId: "b8c893ea-8c82-4cab-8a2e-10eb886dfbc1" },
-      ]),
-    ).toThrow("only one enabled");
+  it("preserves multiple enabled instances and their stable IDs", () => {
+    const second = {
+      ...instance,
+      instanceId: "b8c893ea-8c82-4cab-8a2e-10eb886dfbc1",
+      label: "GitLab.com",
+      baseUrl: "https://gitlab.com",
+    };
+    expect(parseInstances([instance, second])).toEqual([instance, second]);
   });
 
   it("rejects duplicate IDs even when one instance is disabled", () => {

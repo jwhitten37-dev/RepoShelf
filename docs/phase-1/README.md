@@ -13,8 +13,8 @@ No server URL, username, PAT, group name, or project name is recorded here.
 
 - TypeScript VS Code workspace extension targeting VS Code 1.137.0.
 - Node.js 24.21.0 development/build/test pin through `mise`.
-- One enabled corporate self-managed GitLab instance in Phases 1–5.
-- Stable UUID-based instance identity suitable for later multi-instance use.
+- Multiple enabled GitLab instances as of Phase 6, preserving the stable
+  UUID-based identities introduced in Phase 1.
 - PAT capture through a password input and storage in VS Code `SecretStorage`.
 - Connection test through `GET /api/v4/user` before settings are committed.
 - GitLab Activity Bar container and lazy **Remote Catalog** tree.
@@ -98,13 +98,12 @@ API traffic.
 Record only pass/fail and nonsensitive observations. Never record the PAT or
 internal server/project identifiers in this repository.
 
-## Known Phase 1 boundaries
+## Phase 1 boundaries and Phase 6 evolution
 
-- The UI supports one configured instance and does not yet provide remove/edit
-  commands. During development, the non-secret instance record can be cleared
-  through the `reposhelf.instances` setting. A stored PAT remains isolated
-  in `SecretStorage`; lifecycle removal is added with the multi-instance
-  management workflow before organizational use.
+- Phase 6 added multi-instance catalog roots. Search and removal are inline actions
+  on each instance row, while Command Palette use selects an instance when needed.
+  Removal deletes only the selected instance record and PAT; managed workspace
+  records are retained.
 - Corporate GitLab version, PAT scopes, CA/proxy behavior, and server-specific
   compatibility still require manual validation.
 - Native Windows runtime behavior remains a release gate, but the current build
@@ -113,7 +112,7 @@ internal server/project identifiers in this repository.
 
 ## Automated validation coverage
 
-- Instance schema and one-enabled-instance policy.
+- Instance schema, stable unique IDs, and multiple enabled instances.
 - HTTPS and self-managed relative-base-path normalization.
 - PAT/header and credential-bearing URL redaction.
 - API URL construction without credentials.

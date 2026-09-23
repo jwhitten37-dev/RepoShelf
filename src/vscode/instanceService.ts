@@ -18,7 +18,11 @@ export class InstanceService {
   }
 
   public getEnabledInstance(): GitLabInstance | undefined {
-    return this.getInstances().find((instance) => instance.enabled);
+    return this.getEnabledInstances()[0];
+  }
+
+  public getEnabledInstances(): readonly GitLabInstance[] {
+    return this.getInstances().filter((instance) => instance.enabled);
   }
 
   public getTimeoutMs(): number {
@@ -58,10 +62,15 @@ export class InstanceService {
   }
 
   public create(label: string, baseUrl: string): GitLabInstance {
-    if (this.getInstances().length > 0) {
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+    if (
+      this.getInstances().some(
+        (instance) => instance.baseUrl === normalizedBaseUrl,
+      )
+    ) {
       throw new GitLabError(
         "configuration",
-        "Phase 1 supports one configured GitLab instance.",
+        "That GitLab instance is already configured.",
       );
     }
     const normalizedLabel = label.trim();
@@ -75,14 +84,27 @@ export class InstanceService {
       schemaVersion: 1,
       instanceId: randomUUID(),
       label: normalizedLabel,
-      baseUrl: normalizeBaseUrl(baseUrl),
+      baseUrl: normalizedBaseUrl,
       enabled: true,
     };
   }
 
   public async save(instance: GitLabInstance): Promise<void> {
+    await this.saveAll([...this.getInstances(), instance]);
+  }
+
+  public async remove(instanceId: string): Promise<void> {
+    await this.saveAll(
+      this.getInstances().filter(
+        (instance) => instance.instanceId !== instanceId,
+      ),
+    );
+  }
+
+  public async saveAll(instances: readonly GitLabInstance[]): Promise<void> {
+    const validated = parseInstances(instances);
     await vscode.workspace
       .getConfiguration(CONFIGURATION_SECTION)
-      .update(INSTANCES_KEY, [instance], vscode.ConfigurationTarget.Global);
+      .update(INSTANCES_KEY, validated, vscode.ConfigurationTarget.Global);
   }
 }

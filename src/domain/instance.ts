@@ -20,12 +20,6 @@ export function parseInstances(value: unknown): readonly GitLabInstance[] {
       "GitLab instance IDs must be unique.",
     );
   }
-  if (instances.filter((instance) => instance.enabled).length > 1) {
-    throw new GitLabError(
-      "configuration",
-      "Phase 1 supports only one enabled GitLab instance. Disable the additional instance.",
-    );
-  }
   return instances;
 }
 

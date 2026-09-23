@@ -58,7 +58,10 @@ export class RemoteFileSystemProvider implements vscode.FileSystemProvider {
       );
       const instance = this.instances
         .getInstances()
-        .find((candidate) => candidate.instanceId === identity.instanceId);
+        .find(
+          (candidate) =>
+            candidate.instanceId === identity.instanceId && candidate.enabled,
+        );
       if (instance === undefined) {
         throw vscode.FileSystemError.FileNotFound("GitLab instance not found.");
       }
