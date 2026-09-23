@@ -6,8 +6,13 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-23
+
 ### Added
 
+- GitLab connection and a remote project/group catalog.
+- Branch-aware, immutable remote repository browsing.
+- Guarded full and partial+sparse local materialization.
 - Multiple independently authenticated GitLab instance roots with instance-scoped
   search, inline removal, and safe PAT cleanup.
 - Debounced project search across each selected GitLab instance.
@@ -80,9 +85,3 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added guarded ownership/path validation, exact remote-result verification,
   immediate pre-delete revalidation, no-follow removal, and fail-closed partial
   failure handling.
-
-## [0.1.0] - Unreleased
-
-- Phase 1 GitLab connection and remote catalog.
-- Phase 2 branch-aware, immutable remote repository browsing.
-- Phase 3 guarded full and partial+sparse local materialization.
