@@ -24,6 +24,7 @@ import type {
 } from "../src/infrastructure/coordinationRecords.js";
 
 const run = promisify(execFile);
+const PROCESS_CONTENTION_TIMEOUT_MS = 30_000;
 let buildRoot: string;
 let worker: string;
 const roots: string[] = [];
@@ -52,33 +53,37 @@ afterAll(async () => {
 });
 
 describe("independent coordination claim processes", () => {
-  it("elects exactly one claimant across independent Node processes", async () => {
-    for (let batch = 0; batch < 4; batch += 1) {
-      const { root, journal, request } = await setup(batch + 1);
-      const attempts = await Promise.all(
-        Array.from({ length: 50 }, (_, index) =>
-          invoke(
-            root,
-            makeClaim(
-              request,
-              uuid(batch * 50 + index + 20),
-              index % 2 === 0 ? "coordinator" : "detached",
+  it(
+    "elects exactly one claimant across independent Node processes",
+    async () => {
+      for (let batch = 0; batch < 4; batch += 1) {
+        const { root, journal, request } = await setup(batch + 1);
+        const attempts = await Promise.all(
+          Array.from({ length: 50 }, (_, index) =>
+            invoke(
+              root,
+              makeClaim(
+                request,
+                uuid(batch * 50 + index + 20),
+                index % 2 === 0 ? "coordinator" : "detached",
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(
-        attempts.filter(({ stdout }) => stdout === "claimed"),
-      ).toHaveLength(1);
-      expect(
-        attempts.filter(({ stdout }) => stdout === "alreadyClaimed"),
-      ).toHaveLength(49);
-      await expect(
-        journal.readClaim(request.workspaceId, request.operationId),
-      ).resolves.toBeDefined();
-    }
-  });
+        expect(
+          attempts.filter(({ stdout }) => stdout === "claimed"),
+        ).toHaveLength(1);
+        expect(
+          attempts.filter(({ stdout }) => stdout === "alreadyClaimed"),
+        ).toHaveLength(49);
+        await expect(
+          journal.readClaim(request.workspaceId, request.operationId),
+        ).resolves.toBeDefined();
+      }
+    },
+    PROCESS_CONTENTION_TIMEOUT_MS,
+  );
 
   it("does not steal a claim when a worker crashes before publication", async () => {
     const { root, journal, request } = await setup();
