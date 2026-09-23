@@ -1,10 +1,9 @@
 {
   "name": "reposhelf",
   "displayName": "RepoShelf",
-  "description": "Remote-first repository workspaces for VS Code.",
+  "description": "Browse GitLab repositories remotely and materialize guarded local workspaces only when needed.",
   "icon": "resources/reposhelf-icon.png",
   "version": "0.1.0",
-  "private": true,
   "publisher": "chiefwizard",
   "license": "Apache-2.0",
   "homepage": "https://github.com/jwhitten37-dev/RepoShelf#readme",
@@ -32,10 +31,14 @@
   ],
   "keywords": [
     "gitlab",
+    "gitlab self-managed",
+    "repository browser",
     "remote repositories",
+    "remote source",
     "sparse checkout",
     "partial clone",
-    "workspace management"
+    "workspace management",
+    "disk management"
   ],
   "activationEvents": [
     "onFileSystem:reposhelffs",

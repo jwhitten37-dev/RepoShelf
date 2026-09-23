@@ -749,8 +749,17 @@ release blockers unless separately promoted into scope.
   `chiefwizard.reposhelf`.
 - Finalize provider-neutral icon, listing graphics, screenshots, categories,
   keywords, and accessibility text using the approved RepoShelf palette.
+  **Phase 7.2 listing implementation complete:** provider-neutral icon/banner,
+  current categories and discoverability metadata, accessible banner text, and
+  listing-ready feature/limitation copy are implemented. Screenshots are
+  intentionally omitted because no safely sanitized representative dataset is
+  available; corporate data must not be captured for listing media.
 - Document privacy behavior, telemetry posture, token storage, network access,
   managed-workspace ownership, and deletion safeguards in listing-ready form.
+  **Phase 7.2 disclosure implementation complete:** the Marketplace README and
+  [`docs/PRIVACY.md`](./docs/PRIVACY.md) describe API/native-Git data flows,
+  SecretStorage, settings/global storage, memory-only source caching, managed
+  checkout persistence, logs/redaction, user deletion controls, and no telemetry.
 - Produce a reproducible VSIX, inspect its complete contents, install it into a
   clean Extension Development Host, and repeat native Windows and Remote–WSL
   release gates.

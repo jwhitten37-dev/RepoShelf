@@ -102,6 +102,7 @@ export async function packageReleaseCandidate({
   await createVSIX({
     cwd: root,
     dependencies: false,
+    githubBranch: "main",
     packagePath: vsixPath,
     preRelease,
     useYarn: false,

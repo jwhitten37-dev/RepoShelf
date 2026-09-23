@@ -8,6 +8,20 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Multiple independently authenticated GitLab instance roots with instance-scoped
+  search, inline removal, and safe PAT cleanup.
+- Debounced project search across each selected GitLab instance.
+- Explicit remote branch creation from an exact source commit with confirmation,
+  collision protection, single-dispatch POST, and ambiguous-result reconciliation.
+- Local Workspaces disk dashboard with sorting, filtering, retained-workspace
+  reopening, diagnostics, and non-destructive reminders.
+- Configurable, cancellation-aware retries for transient GET network, timeout,
+  rate-limit, and server failures; writes remain non-retryable.
+- Corporate CA/proxy diagnostics, proxy credential redaction, insecure TLS
+  environment refusal, and separate Windows/Remote–WSL guidance.
+- Deterministic cross-platform VSIX packaging with exact content allowlists,
+  packaged identity validation, and SHA-256 evidence.
+- Marketplace-ready privacy/data-handling and current limitations documentation.
 - Public-source repository governance, security policy, and automated checks.
 - RepoShelf provider-neutral product identity and package metadata.
 - Secretless Azure Pipelines packaging and Marketplace publishing through
@@ -37,6 +51,10 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Deferred sparse profile management and in-place sparse expansion until after the
+  Marketplace MVP.
+- Kept OAuth, merge-request integration, and persistent offline source caching
+  outside the Marketplace MVP scope.
 - Renamed pre-release commands, settings, URI scheme, storage keys, workspace
   root, and ownership markers from the prototype namespace to `reposhelf`.
 - Added bounded retries for transient Windows directory locks during atomic
@@ -51,6 +69,11 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- Added exact-origin/API-path credential boundaries, bounded redirect handling,
+  proxy/TLS error classification, and deterministic no-retry handling for TLS and
+  proxy-authentication failures.
+- Added fail-closed refusal of `NODE_TLS_REJECT_UNAUTHORIZED=0` and truthy
+  `GIT_SSL_NO_VERIFY` environments.
 - Added publication ignores and a pre-publication sensitive-value audit.
 - Added guarded ownership/path validation, exact remote-result verification,
   immediate pre-delete revalidation, no-follow removal, and fail-closed partial
