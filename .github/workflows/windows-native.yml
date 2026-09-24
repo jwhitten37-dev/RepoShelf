@@ -70,7 +70,7 @@ jobs:
         id: package
 
       - name: Upload native Windows evidence and candidate
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: reposhelf-windows-native-${{ github.sha }}
           path: ${{ steps.package.outputs.artifact }}
