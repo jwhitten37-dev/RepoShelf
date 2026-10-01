@@ -15,10 +15,15 @@ export const ALLOWED_LICENSES = Object.freeze([
   "MPL-2.0",
 ]);
 
+export const RELEASE_TOOLING_LOCKFILE = "tools/publish/package-lock.json";
+
 const REVIEWED_VSCE_SIGN_LICENSE = "SEE LICENSE IN LICENSE.txt";
 const VSCE_SIGN_PACKAGE = /^@vscode\/vsce-sign(?:-|$)/u;
 
-export function createLicenseInventory(lockfileBytes) {
+export function createLicenseInventory(
+  lockfileBytes,
+  lockfileName = "package-lock.json",
+) {
   const lock = JSON.parse(lockfileBytes.toString("utf8"));
   if (lock.lockfileVersion !== 3 || !isRecord(lock.packages)) {
     throw new Error("Expected an npm lockfileVersion 3 package graph.");
@@ -78,7 +83,7 @@ export function createLicenseInventory(lockfileBytes) {
   return {
     schemaVersion: 1,
     lockfile: {
-      fileName: "package-lock.json",
+      fileName: lockfileName,
       sha256: createHash("sha256").update(lockfileBytes).digest("hex"),
     },
     policy: {
@@ -117,18 +122,30 @@ function isRecord(value) {
 
 async function main() {
   const root = process.cwd();
-  const lockfileBytes = await readFile(path.join(root, "package-lock.json"));
-  const inventory = createLicenseInventory(lockfileBytes);
+  const inventory = createLicenseInventory(
+    await readFile(path.join(root, "package-lock.json")),
+  );
+  // The publish job installs only this isolated tool graph, so it is held to
+  // the same policy as the main development graph.
+  const releaseTooling = createLicenseInventory(
+    await readFile(path.join(root, RELEASE_TOOLING_LOCKFILE)),
+    RELEASE_TOOLING_LOCKFILE,
+  );
   const outputArgument = process.argv[2];
   if (outputArgument !== undefined) {
     const output = path.resolve(root, outputArgument);
-    await writeFile(output, `${JSON.stringify(inventory, null, 2)}\n`, {
-      mode: 0o600,
-    });
+    await writeFile(
+      output,
+      `${JSON.stringify({ ...inventory, releaseTooling }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
     console.log(`License inventory: ${output}`);
   }
   console.log(
     `License policy passed: ${inventory.summary.packageInstances} development package instances, ${inventory.summary.reviewedExceptions} reviewed tool exceptions, no production dependencies.`,
+  );
+  console.log(
+    `Release tooling license policy passed: ${releaseTooling.summary.packageInstances} package instances, ${releaseTooling.summary.reviewedExceptions} reviewed tool exceptions, no production dependencies.`,
   );
 }
 

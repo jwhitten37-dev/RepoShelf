@@ -30,14 +30,14 @@ describe("Phase 7 release governance", () => {
     expect(pipeline).toContain("Expected exactly one package evidence file");
     expect(pipeline).toContain("evidence.vsix.sha256 !== actual");
     expect(pipeline.indexOf("evidence.vsix.sha256 !== actual")).toBeLessThan(
-      pipeline.indexOf("npm exec -- vsce publish"),
+      pipeline.indexOf('node "$vsce" publish'),
     );
     expect(pipeline).toContain(
-      "npm exec -- vsce verify-pat chiefwizard --azure-credential",
+      'node "$vsce" verify-pat chiefwizard --azure-credential',
     );
     expect(
-      pipeline.indexOf("npm exec -- vsce verify-pat chiefwizard"),
-    ).toBeLessThan(pipeline.indexOf("npm exec -- vsce publish"));
+      pipeline.indexOf('node "$vsce" verify-pat chiefwizard'),
+    ).toBeLessThan(pipeline.indexOf('node "$vsce" publish'));
   });
 
   it("defines stable promotion, publisher recovery, and fix-forward rollback", () => {

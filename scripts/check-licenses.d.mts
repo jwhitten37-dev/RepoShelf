@@ -1,6 +1,10 @@
 export const ALLOWED_LICENSES: readonly string[];
+export const RELEASE_TOOLING_LOCKFILE: string;
 
-export function createLicenseInventory(lockfileBytes: Buffer): {
+export function createLicenseInventory(
+  lockfileBytes: Buffer,
+  lockfileName?: string,
+): {
   readonly schemaVersion: number;
   readonly lockfile: { readonly fileName: string; readonly sha256: string };
   readonly policy: {

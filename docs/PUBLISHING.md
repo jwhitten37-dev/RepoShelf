@@ -43,33 +43,57 @@ resource ID to this repository.
 2. Formatting, linting, type checking, the lockfile license policy, all tests,
    compilation, and a high-severity dependency audit must pass.
 3. The pinned local `@vscode/vsce` packages one VSIX.
-4. `npm run package:vsix -- --out-dir <directory>` creates the candidate through
+4. The isolated publishing tool in `tools/publish` is installed from its own
+   lockfile with lifecycle scripts disabled, run once, and audited, so a broken
+   or vulnerable tool graph fails before any tag can publish.
+5. `npm run package:vsix -- --out-dir <directory>` creates the candidate through
    the pinned local `@vscode/vsce`, validates the payload and final archive against
    explicit allowlists, and verifies the packaged `chiefwizard.reposhelf` identity,
    version, workspace extension kind, and entry point.
-5. The validated VSIX and its JSON evidence file are retained as an Azure Pipeline
+6. The validated VSIX and its JSON evidence file are retained as an Azure Pipeline
    artifact. Evidence includes only public package metadata, exact file lists,
    byte size, and SHA-256; it contains no environment dump or credentials.
-6. Only a `v*` tag can enter the publishing stage. The tag must exactly equal
+7. Only a `v*` tag can enter the publishing stage. The tag must exactly equal
    `v<package.json version>` and identify a commit contained in `origin/main`.
-7. The publishing stage downloads that exact VSIX without rebuilding it,
+8. The publishing stage installs only the isolated publishing tool (see below)
+   and downloads that exact VSIX without rebuilding it. It then
    independently compares its identity and SHA-256 with the retained evidence,
    verifies that the current Entra principal has a role on the `chiefwizard`
    publisher, and only then publishes it.
 
-Ordinary `main` and pull-request builds never publish.
+Ordinary `main` and pull-request builds never publish. No pipeline checkout
+persists repository credentials.
 
 The pipeline currently packages and publishes with `--pre-release` because
 RepoShelf is pre-release software. Removing that flag requires an explicit
 release-readiness review and documentation update; a version tag alone does not
 authorize a stable Marketplace release.
 
+## Isolated publishing tool
+
+The publishing stage holds the Marketplace identity, so it doesn't install the
+project's development dependencies. It runs
+`npm ci --ignore-scripts --prefix tools/publish`, which installs only the exact
+`@vscode/vsce` version pinned in `tools/publish/package.json` and its lockfile,
+with no install-time scripts. It then invokes vsce by explicit path from
+`tools/publish/node_modules`. Nothing in `tools/` is included in the VSIX.
+
+To update vsce, bump `@vscode/vsce` to the same exact version in both the root
+`package.json` (used for local packaging) and `tools/publish/package.json`, and
+regenerate both lockfiles. Dependabot opens separate pull requests for the two
+manifests; merge them together. `npm run license:check` covers both lockfiles.
+
+GitHub Actions in `.github/workflows` are pinned to full commit SHAs with a
+version comment. Dependabot proposes SHA updates; review each one before merging.
+
 ## Required Azure DevOps controls
 
 Before enabling a release, create or verify the `reposhelf-marketplace`
 environment and configure an **Approval** check in Azure DevOps. Limit approval
-authority to trusted maintainers. Also restrict use of the `Azure` service
-connection to the publishing pipeline rather than granting it to every pipeline.
+authority to trusted maintainers. Also add a **Branch control** check that allows
+only `refs/tags/v*`, so the environment can't be used from any branch build.
+Restrict use of the `Azure` service connection to the publishing pipeline rather
+than granting it to every pipeline.
 
 Environment approvals and service-connection permissions are Azure DevOps
 configuration and cannot be enforced solely by repository YAML. A missing or

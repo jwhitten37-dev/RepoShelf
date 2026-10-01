@@ -17,6 +17,13 @@ updates:
       # Blocked until typescript-eslint supports TypeScript 7.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+  # Isolated Marketplace publishing tool. Keep @vscode/vsce at the same version
+  # as the root devDependency; merge both update PRs together.
+  - package-ecosystem: npm
+    directory: /tools/publish
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /
     schedule:
