@@ -1,0 +1,10 @@
+{
+  "name": "reposhelf-publish-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated, pinned Marketplace publishing tool for the RepoShelf release pipeline. Not part of the extension package.",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@vscode/vsce": "4.0.0"
+  }
+}

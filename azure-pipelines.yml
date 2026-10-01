@@ -27,7 +27,6 @@ stages:
         steps:
           - checkout: self
             fetchDepth: 0
-            persistCredentials: true
 
           - task: NodeTool@0
             displayName: Use Node.js $(nodeVersion)
@@ -45,6 +44,13 @@ stages:
 
           - script: npm audit --audit-level=high
             displayName: Audit production and development dependencies
+
+          - script: |
+              set -euo pipefail
+              npm ci --ignore-scripts --prefix tools/publish
+              node tools/publish/node_modules/@vscode/vsce/vsce --version
+              npm audit --audit-level=high --prefix tools/publish
+            displayName: Verify isolated publishing tool
 
           - bash: |
               set -euo pipefail
@@ -100,8 +106,10 @@ stages:
                   inputs:
                     versionSpec: $(nodeVersion)
 
-                - script: npm ci
-                  displayName: Install locked publishing tool
+                # Install only the pinned publishing tool, without lifecycle
+                # scripts, so no development dependency runs in this job.
+                - script: npm ci --ignore-scripts --prefix tools/publish
+                  displayName: Install isolated publishing tool
 
                 - task: DownloadPipelineArtifact@2
                   displayName: Download validated VSIX
@@ -140,9 +148,11 @@ stages:
                       }
                       NODE
 
-                      npm exec -- vsce verify-pat chiefwizard --azure-credential
+                      vsce="tools/publish/node_modules/@vscode/vsce/vsce"
 
-                      npm exec -- vsce publish \
+                      node "$vsce" verify-pat chiefwizard --azure-credential
+
+                      node "$vsce" publish \
                         --packagePath "${vsix_files[0]}" \
                         --azure-credential \
                         --pre-release

@@ -27,3 +27,8 @@ managed local workspaces. Changes involving authentication, URL validation,
 process execution, filesystem containment, ownership markers, or deletion need
 explicit tests and security review. See the
 [threat model](./docs/phase-0/SECURITY-THREAT-MODEL.md).
+
+The release pipeline is also a security boundary because it holds the
+Marketplace publishing identity. Changes to the publishing stage, the isolated
+publishing tool in `tools/publish`, pipeline credentials, or GitHub Actions pins
+need the same review. See [Marketplace publishing](./docs/PUBLISHING.md).

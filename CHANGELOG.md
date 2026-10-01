@@ -13,6 +13,15 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Limited automated dependency updates so type definitions stay aligned with the
   supported Node.js and VS Code versions, and TypeScript stays on a version
   supported by the lint toolchain.
+- Updated development tooling: ESLint, Prettier, typescript-eslint, Vitest, and
+  Node.js type definitions within the supported major version.
+
+### Security
+
+- Hardened the Marketplace publishing pipeline. Publication installs only a
+  pinned, isolated publishing tool with lifecycle scripts disabled, pipeline
+  checkouts no longer persist repository credentials, and GitHub Actions are
+  pinned to full commit SHAs.
 
 ## [0.1.0] - 2026-09-23
 

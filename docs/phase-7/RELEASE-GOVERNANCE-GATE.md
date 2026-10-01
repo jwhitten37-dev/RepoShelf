@@ -48,11 +48,12 @@ long enough to support the project's security and rollback obligations.
 
 ## Third-party license policy
 
-`npm run license:check` reads the complete npm lockfile graph without network
-access. It fails for a missing declaration, an unreviewed license, a malformed
-review exception, or any production dependency. RepoShelf currently has no runtime
-npm dependency: the bundled extension uses project code and Node/VS Code APIs, and
-the exact VSIX allowlist excludes `node_modules`.
+`npm run license:check` reads the complete npm lockfile graph, and the isolated
+publishing tool's `tools/publish/package-lock.json`, without network access. It
+fails if either lockfile has a missing declaration, an unreviewed license, a
+malformed review exception, or any production dependency. RepoShelf currently
+has no runtime npm dependency: the bundled extension uses project code and
+Node/VS Code APIs, and the exact VSIX allowlist excludes `node_modules`.
 
 The accepted lockfile declarations are `0BSD`, `Apache-2.0`, `Artistic-2.0`,
 `BSD-2-Clause`, `BSD-3-Clause`, `BlueOak-1.0.0`, `ISC`, `MIT`, and `MPL-2.0`.
@@ -76,7 +77,8 @@ npm run license:check -- release-artifacts/licenses.json
 ```
 
 The inventory contains package names, versions, declared licenses, dependency
-classification, policy, and lockfile SHA-256. It contains no environment data.
+classification, policy, and lockfile SHA-256, with the publishing tool's graph
+under `releaseTooling`. It contains no environment data.
 
 ## Publisher security and recovery
 
