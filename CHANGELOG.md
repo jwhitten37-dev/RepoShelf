@@ -6,6 +6,14 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the CI artifact upload action used by the native Windows validation
+  gate.
+- Limited automated dependency updates so type definitions stay aligned with the
+  supported Node.js and VS Code versions, and TypeScript stays on a version
+  supported by the lint toolchain.
+
 ## [0.1.0] - 2026-09-23
 
 ### Added
