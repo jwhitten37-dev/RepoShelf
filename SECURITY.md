@@ -28,6 +28,11 @@ process execution, filesystem containment, ownership markers, or deletion need
 explicit tests and security review. See the
 [threat model](./docs/phase-0/SECURITY-THREAT-MODEL.md).
 
+Settings that choose where credentials are sent or where files are written,
+currently `reposhelf.instances` and `reposhelf.cloneRoot`, must be readable only
+from user or remote-machine settings, never from an opened workspace. Changing
+their scope or how they are read needs the same review.
+
 The release pipeline is also a security boundary because it holds the
 Marketplace publishing identity. Changes to the publishing stage, the isolated
 publishing tool in `tools/publish`, pipeline credentials, or GitHub Actions pins

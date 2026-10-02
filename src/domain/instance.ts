@@ -69,6 +69,72 @@ export function normalizeBaseUrl(
   return url.toString().replace(/\/$/u, "");
 }
 
+/**
+ * The subset of a VS Code configuration inspection that scope resolution needs.
+ */
+export interface SettingInspection<T> {
+  readonly defaultValue?: T;
+  readonly globalValue?: T;
+  readonly workspaceValue?: T;
+  readonly workspaceFolderValue?: T;
+  readonly workspaceLanguageValue?: T;
+  readonly workspaceFolderLanguageValue?: T;
+}
+
+export interface UserScopedValue<T> {
+  readonly value: T;
+  readonly ignoredWorkspaceValue: boolean;
+}
+
+/**
+ * Resolves a setting from user (or remote-machine) settings only. Workspace and
+ * folder values are ignored because an opened repository controls them, and
+ * these settings decide where credentials are sent and where files are written.
+ */
+export function resolveUserScopedValue<T>(
+  inspection: SettingInspection<T> | undefined,
+  fallback: T,
+): UserScopedValue<T> {
+  const ignoredWorkspaceValue =
+    inspection !== undefined &&
+    [
+      inspection.workspaceValue,
+      inspection.workspaceFolderValue,
+      inspection.workspaceLanguageValue,
+      inspection.workspaceFolderLanguageValue,
+    ].some((value) => value !== undefined);
+  return {
+    value: inspection?.globalValue ?? inspection?.defaultValue ?? fallback,
+    ignoredWorkspaceValue,
+  };
+}
+
+export function appendInstance(
+  existing: readonly GitLabInstance[],
+  instance: GitLabInstance,
+): readonly GitLabInstance[] {
+  if (
+    existing.some(
+      (candidate) =>
+        candidate.instanceId === instance.instanceId ||
+        candidate.baseUrl === instance.baseUrl,
+    )
+  ) {
+    throw new GitLabError(
+      "configuration",
+      "That GitLab instance is already configured.",
+    );
+  }
+  return [...existing, instance];
+}
+
+export function removeInstanceById(
+  existing: readonly GitLabInstance[],
+  instanceId: string,
+): readonly GitLabInstance[] {
+  return existing.filter((instance) => instance.instanceId !== instanceId);
+}
+
 function parseInstance(value: unknown): GitLabInstance {
   if (!isRecord(value)) {
     throw new GitLabError(

@@ -67,6 +67,11 @@ independently from Windows.
 The default managed-workspace root is `~/reposhelf-workspaces`. Configure
 `reposhelf.cloneRoot` before the first materialization to use another location.
 
+GitLab instances and `reposhelf.cloneRoot` are read only from your user settings
+(or remote settings under Remote–WSL). RepoShelf ignores them in a workspace's
+`.vscode/settings.json`, so an opened repository can't redirect your
+credentials or checkouts.
+
 ## Managed workspace lifecycle
 
 Materialized repositories are extension-managed workspaces, not temporary folders.

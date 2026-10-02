@@ -1,6 +1,6 @@
 # RepoShelf Privacy and Data Handling
 
-Last reviewed: 2026-09-23
+Last reviewed: 2026-10-01
 
 RepoShelf is a local VS Code extension. It does not include a telemetry SDK, serve
 advertising, or send usage analytics to the RepoShelf maintainer. It communicates
@@ -50,6 +50,12 @@ For each configured GitLab instance, RepoShelf stores a generated instance ID,
 display label, HTTPS base URL, and enabled state in VS Code configuration. Other
 RepoShelf settings include the managed clone root and bounded timeout, retry,
 memory-cache, disk-advisory, and reminder preferences.
+
+Instance definitions and the managed clone root are read and written only in
+user settings, or in remote-machine settings when VS Code is connected to a
+remote host such as WSL. RepoShelf ignores these settings in a workspace's
+`.vscode/settings.json`. It records, per workspace, which ignored settings it
+has already shown a notice for, so the notice appears once.
 
 ### SecretStorage
 

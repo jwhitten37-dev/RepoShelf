@@ -83,7 +83,7 @@ describe("Phase 5A search and Phase 6A branch-write contributions", () => {
     );
     expect(commandSource).not.toContain("Phase 1 supports one configured");
     expect(instanceServiceSource).toContain(
-      "this.saveAll([...this.getInstances(), instance])",
+      "this.saveAll(appendInstance(this.getInstances(), instance))",
     );
     expect(catalogSource).toContain(".getEnabledInstances()");
 

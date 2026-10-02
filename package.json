@@ -25,6 +25,12 @@
   "extensionKind": [
     "workspace"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "RepoShelf handles GitLab credentials, runs native Git, and deletes managed workspaces, so it requires a trusted workspace."
+    }
+  },
   "categories": [
     "SCM Providers",
     "Other"
@@ -351,8 +357,8 @@
         "reposhelf.instances": {
           "type": "array",
           "default": [],
-          "scope": "machine-overridable",
-          "description": "Configured GitLab instances. Each instance uses an independent UUID-based identity and SecretStorage PAT.",
+          "scope": "machine",
+          "description": "Configured GitLab instances. Each instance uses an independent UUID-based identity and SecretStorage PAT. Read only from user or remote-machine settings; workspace values are ignored.",
           "items": {
             "type": "object",
             "required": [
@@ -391,8 +397,8 @@
             "null"
           ],
           "default": null,
-          "scope": "machine-overridable",
-          "description": "Host-local root for extension-managed Git checkouts. Defaults to ~/reposhelf-workspaces."
+          "scope": "machine",
+          "description": "Host-local root for extension-managed Git checkouts. Defaults to ~/reposhelf-workspaces. Read only from user or remote-machine settings; workspace values are ignored."
         },
         "reposhelf.api.timeoutMs": {
           "type": "number",

@@ -3,18 +3,28 @@ import { homedir } from "node:os";
 import path from "node:path";
 import * as vscode from "vscode";
 import { GitLabError } from "../domain/errors.js";
-import { normalizeBaseUrl, parseInstances } from "../domain/instance.js";
+import {
+  appendInstance,
+  normalizeBaseUrl,
+  parseInstances,
+  removeInstanceById,
+  resolveUserScopedValue,
+} from "../domain/instance.js";
 import type { GitLabInstance } from "../domain/models.js";
 
 const CONFIGURATION_SECTION = "reposhelf";
 const INSTANCES_KEY = "instances";
+const CLONE_ROOT_KEY = "cloneRoot";
 
 export class InstanceService {
+  public constructor(
+    private readonly onIgnoredWorkspaceSetting: (
+      settingName: string,
+    ) => void = () => undefined,
+  ) {}
+
   public getInstances(): readonly GitLabInstance[] {
-    const value = vscode.workspace
-      .getConfiguration(CONFIGURATION_SECTION)
-      .get<unknown>(INSTANCES_KEY, []);
-    return parseInstances(value);
+    return parseInstances(this.readUserScoped<unknown>(INSTANCES_KEY, []));
   }
 
   public getEnabledInstance(): GitLabInstance | undefined {
@@ -54,10 +64,8 @@ export class InstanceService {
   }
 
   public getCloneRoot(): string {
-    const configured = vscode.workspace
-      .getConfiguration(CONFIGURATION_SECTION)
-      .get<string | null>("cloneRoot", null);
-    if (configured !== null && configured.trim() !== "")
+    const configured = this.readUserScoped<unknown>(CLONE_ROOT_KEY, null);
+    if (typeof configured === "string" && configured.trim() !== "")
       return configured.trim();
     return path.join(homedir(), "reposhelf-workspaces");
   }
@@ -65,7 +73,7 @@ export class InstanceService {
   public async saveCloneRoot(cloneRoot: string): Promise<void> {
     await vscode.workspace
       .getConfiguration(CONFIGURATION_SECTION)
-      .update("cloneRoot", cloneRoot, vscode.ConfigurationTarget.Global);
+      .update(CLONE_ROOT_KEY, cloneRoot, vscode.ConfigurationTarget.Global);
   }
 
   public create(label: string, baseUrl: string): GitLabInstance {
@@ -97,15 +105,11 @@ export class InstanceService {
   }
 
   public async save(instance: GitLabInstance): Promise<void> {
-    await this.saveAll([...this.getInstances(), instance]);
+    await this.saveAll(appendInstance(this.getInstances(), instance));
   }
 
   public async remove(instanceId: string): Promise<void> {
-    await this.saveAll(
-      this.getInstances().filter(
-        (instance) => instance.instanceId !== instanceId,
-      ),
-    );
+    await this.saveAll(removeInstanceById(this.getInstances(), instanceId));
   }
 
   public async saveAll(instances: readonly GitLabInstance[]): Promise<void> {
@@ -113,5 +117,18 @@ export class InstanceService {
     await vscode.workspace
       .getConfiguration(CONFIGURATION_SECTION)
       .update(INSTANCES_KEY, validated, vscode.ConfigurationTarget.Global);
+  }
+
+  // Deliberately avoids `.get()`, which merges in workspace and folder values
+  // that an opened repository controls.
+  private readUserScoped<T>(key: string, fallback: T): T {
+    const resolved = resolveUserScopedValue(
+      vscode.workspace.getConfiguration(CONFIGURATION_SECTION).inspect<T>(key),
+      fallback,
+    );
+    if (resolved.ignoredWorkspaceValue) {
+      this.onIgnoredWorkspaceSetting(`${CONFIGURATION_SECTION}.${key}`);
+    }
+    return resolved.value;
   }
 }

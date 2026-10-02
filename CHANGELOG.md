@@ -18,6 +18,12 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- GitLab instance definitions and the managed clone root are now read only from
+  user or remote-machine settings. Values in a workspace's settings are ignored,
+  and RepoShelf shows a one-time notice when a workspace tries to set them.
+  Adding or removing an instance no longer copies workspace-provided instances
+  into user settings.
+- RepoShelf now explicitly declares that it requires a trusted workspace.
 - Hardened the Marketplace publishing pipeline. Publication installs only a
   pinned, isolated publishing tool with lifecycle scripts disabled, pipeline
   checkouts no longer persist repository credentials, and GitHub Actions are

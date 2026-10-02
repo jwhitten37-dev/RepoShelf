@@ -15,6 +15,7 @@ import {
 } from "./vscode/catalogTree.js";
 import { DefaultClientFactory } from "./vscode/clientFactory.js";
 import { CommandController } from "./vscode/commands.js";
+import { IgnoredWorkspaceSettingNotice } from "./vscode/ignoredSettingNotice.js";
 import { InstanceService } from "./vscode/instanceService.js";
 import { RefStore } from "./vscode/refStore.js";
 import {
@@ -39,7 +40,14 @@ export async function activate(
 ): Promise<void> {
   const output = vscode.window.createOutputChannel("RepoShelf");
   const logger = new OutputChannelLogger(output);
-  const instances = new InstanceService();
+  const ignoredSettingNotice = new IgnoredWorkspaceSettingNotice(
+    context.workspaceState,
+    logger,
+    (message) => vscode.window.showWarningMessage(message),
+  );
+  const instances = new InstanceService((settingName) => {
+    ignoredSettingNotice.report(settingName);
+  });
   const tokens = new VsCodeTokenStore(context.secrets);
   const clients = new DefaultClientFactory(
     tokens,
