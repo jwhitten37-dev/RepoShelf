@@ -3,7 +3,7 @@
   "displayName": "RepoShelf",
   "description": "Browse GitLab repositories remotely and materialize guarded local workspaces only when needed.",
   "icon": "resources/reposhelf-icon.png",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "chiefwizard",
   "license": "Apache-2.0",
   "homepage": "https://github.com/jwhitten37-dev/RepoShelf#readme",

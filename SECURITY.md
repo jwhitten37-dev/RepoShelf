@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-RepoShelf is pre-release software. Security fixes are applied to the latest
-commit on `main`; no released version is currently supported.
+RepoShelf is pre-release software. Security fixes are released only for the
+latest published Marketplace version, currently 0.1.1. Upgrade to the latest
+version to receive fixes; earlier versions are not patched.
 
 ## Reporting a vulnerability
 

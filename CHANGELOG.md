@@ -6,6 +6,20 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-02
+
+Security update. All users should upgrade. No data migration is required.
+
+If you defined `reposhelf.instances` or `reposhelf.cloneRoot` in a workspace's
+`.vscode/settings.json`, move them to your user settings (or remote settings
+under Remote–WSL); workspace values are now ignored. Retained managed
+workspaces, stored PATs, and user-level instance settings are unaffected.
+
+Known issue: when two VS Code windows save managed-workspace records at the
+same moment, one of them may briefly report that registry storage is
+unavailable. The operation fails safely without changing any workspace; retry
+it.
+
 ### Changed
 
 - Updated the CI artifact upload action used by the native Windows validation
