@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { constants } from "node:fs";
 import { GitLabError } from "../domain/errors.js";
+import { compareRepositoryOrigin } from "../domain/repositoryOrigin.js";
 import type { CloneMode, ManagedWorkspaceRecord } from "../domain/models.js";
 import type { GitRunner } from "./gitRunner.js";
 import {
@@ -33,6 +34,15 @@ export interface WorkspaceRegistry {
   save(record: ManagedWorkspaceRecord): Promise<void>;
 }
 
+/**
+ * Binds a new clone to its GitLab instance. `confirmedCrossHost` is set only
+ * after the user explicitly accepted a clone URL on that other host.
+ */
+export interface RepositoryOriginBinding {
+  readonly instanceBaseUrl: string;
+  readonly confirmedCrossHost?: string;
+}
+
 export interface MaterializationRequest {
   readonly extensionSourceRoot: string;
   readonly cloneRoot: string;
@@ -46,6 +56,7 @@ export interface MaterializationRequest {
   readonly cloneMode: CloneMode;
   readonly sparseDirectories: readonly string[];
   readonly revealPath?: string;
+  readonly origin?: RepositoryOriginBinding;
   readonly signal?: AbortSignal;
 }
 
@@ -101,6 +112,10 @@ export class MaterializationService {
       await this.registry.save(existing);
       return { record: existing, reused: true };
     }
+
+    // Reusing a validated checkout needs no origin binding, but nothing is
+    // cloned unless the clone URL belongs to the instance or was confirmed.
+    this.assertCloneOrigin(request);
 
     const operationId = randomUUID();
     await writeJsonExclusive(paths.temporaryMarkerPath, {
@@ -185,6 +200,32 @@ export class MaterializationService {
       );
       throw error;
     }
+  }
+
+  private assertCloneOrigin(request: MaterializationRequest): void {
+    if (this.allowFileUrlForTests && isFileUrl(request.repositoryUrl)) return;
+    if (request.origin === undefined) {
+      throw new GitLabError(
+        "configuration",
+        "A new managed checkout requires its GitLab instance origin; nothing was cloned.",
+      );
+    }
+    const comparison = compareRepositoryOrigin(
+      request.repositoryUrl,
+      request.origin.instanceBaseUrl,
+    );
+    if (
+      comparison.kind === "match" ||
+      request.origin.confirmedCrossHost === comparison.repositoryHost
+    ) {
+      return;
+    }
+    throw new GitLabError(
+      "configuration",
+      comparison.reason === "host"
+        ? `GitLab reported a clone URL on ${comparison.repositoryHost}, outside the configured instance ${comparison.instanceHost}. Nothing was cloned.`
+        : `GitLab reported a clone URL outside the configured instance path on ${comparison.repositoryHost}. Nothing was cloned.`,
+    );
   }
 
   private async clone(
@@ -551,6 +592,14 @@ function parseRecord(value: unknown): ManagedWorkspaceRecord {
     createdAt: value.createdAt,
     lastOpenedAt: value.lastOpenedAt,
   };
+}
+
+function isFileUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "file:";
+  } catch {
+    return false;
+  }
 }
 
 function unique(values: readonly string[]): readonly string[] {

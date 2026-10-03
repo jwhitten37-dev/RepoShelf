@@ -12,7 +12,12 @@ import {
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ManagedWorkspaceRecord } from "../src/domain/models.js";
-import { NativeGitRunner } from "../src/infrastructure/gitRunner.js";
+import { GitLabError } from "../src/domain/errors.js";
+import {
+  NativeGitRunner,
+  type GitResult,
+  type GitRunner,
+} from "../src/infrastructure/gitRunner.js";
 import {
   MaterializationService,
   placeWorkspace,
@@ -312,6 +317,105 @@ describe("MaterializationService with disposable local Git remotes", () => {
 
 async function readCheckoutText(file: string): Promise<string> {
   return (await readFile(file, "utf8")).replaceAll("\r\n", "\n");
+}
+
+describe("MaterializationService clone origin binding", () => {
+  const instanceBaseUrl = "https://gitlab.example.test";
+  let root: string;
+  let git: RecordingGit;
+  let service: MaterializationService;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), "reposhelf-origin-"));
+    git = new RecordingGit();
+    service = new MaterializationService(git, new MemoryRegistry());
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("refuses a new clone without an origin binding before running Git", async () => {
+    await expect(
+      service.materialize(originRequest("https://gitlab.example.test/g/p.git")),
+    ).rejects.toThrow("requires its GitLab instance origin");
+    expect(git.calls).toHaveLength(0);
+  });
+
+  it("refuses an unconfirmed cross-host clone URL before running Git", async () => {
+    await expect(
+      service.materialize(
+        originRequest("https://other.example.test/g/p.git", {
+          instanceBaseUrl,
+        }),
+      ),
+    ).rejects.toThrow("outside the configured instance");
+    expect(git.calls).toHaveLength(0);
+  });
+
+  it("refuses a confirmation for a different host", async () => {
+    await expect(
+      service.materialize(
+        originRequest("https://other.example.test/g/p.git", {
+          instanceBaseUrl,
+          confirmedCrossHost: "third.example.test",
+        }),
+      ),
+    ).rejects.toThrow("outside the configured instance");
+    expect(git.calls).toHaveLength(0);
+  });
+
+  it.each([
+    ["a matching clone URL", "https://gitlab.example.test/g/p.git", undefined],
+    [
+      "a confirmed cross-host clone URL",
+      "https://other.example.test/g/p.git",
+      "other.example.test",
+    ],
+  ])("clones %s", async (_name, repositoryUrl, confirmedCrossHost) => {
+    await expect(
+      service.materialize(
+        originRequest(repositoryUrl, {
+          instanceBaseUrl,
+          ...(confirmedCrossHost === undefined ? {} : { confirmedCrossHost }),
+        }),
+      ),
+    ).rejects.toThrow("stopped after the first Git call");
+    expect(git.calls[0]).toEqual(
+      expect.arrayContaining(["clone", repositoryUrl]),
+    );
+  });
+
+  function originRequest(
+    repositoryUrl: string,
+    origin?: MaterializationRequest["origin"],
+  ): MaterializationRequest {
+    return {
+      extensionSourceRoot: path.join(root, "extension-source"),
+      cloneRoot: path.join(root, "managed"),
+      instanceId: "d48616b2-70ca-4fe0-91ac-d97e70a0de82",
+      projectId: 842,
+      projectPath: "g/p",
+      repositoryUrl,
+      sourceBranch: "main",
+      targetBranch: "main",
+      pinnedCommitSha: "a".repeat(40),
+      cloneMode: "full",
+      sparseDirectories: [],
+      ...(origin === undefined ? {} : { origin }),
+    };
+  }
+});
+
+class RecordingGit implements GitRunner {
+  public readonly calls: (readonly string[])[] = [];
+
+  public run(args: readonly string[]): Promise<GitResult> {
+    this.calls.push(args);
+    return Promise.reject(
+      new GitLabError("server", "stopped after the first Git call"),
+    );
+  }
 }
 
 describe("Windows-safe workspace placement", () => {

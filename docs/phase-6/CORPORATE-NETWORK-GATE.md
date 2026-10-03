@@ -80,6 +80,15 @@ credentials into Git URLs or arguments. Interactive proxy or Git credential
 prompts cannot be relied upon during managed operations. Do not disable
 `http.sslVerify` and do not set `GIT_SSL_NO_VERIFY`.
 
+RepoShelf clones from the `http_url_to_repo` address GitLab reports for each
+project. That address must use the same host, port, and base path as the
+configured instance URL. Some self-managed deployments serve Git from a
+different address than the API, for example when GitLab's `external_url` differs
+from the URL users configure. In that case RepoShelf shows a confirmation that
+names the clone host before each new checkout. Confirm only when you expect
+that address; Git will authenticate to it with the credential helper's
+credentials for that host.
+
 ## Environment-specific setup boundary
 
 ### Native Windows

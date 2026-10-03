@@ -2,13 +2,17 @@ import path from "node:path";
 import * as vscode from "vscode";
 import { GitLabError, toUserMessage } from "../domain/errors.js";
 import { validateBranchName } from "../domain/branchName.js";
+import { compareRepositoryOrigin } from "../domain/repositoryOrigin.js";
 import {
   createRemoteFilePath,
   createRemoteFileQuery,
   parseRemoteFileIdentity,
 } from "../domain/remoteUri.js";
 import type { Logger } from "../infrastructure/logger.js";
-import type { MaterializationService } from "../infrastructure/materialization.js";
+import type {
+  MaterializationService,
+  RepositoryOriginBinding,
+} from "../infrastructure/materialization.js";
 import type {
   GitLabBranch,
   GitLabInstance,
@@ -463,6 +467,8 @@ export class CommandController {
         node.type === "repository"
           ? node.context
           : await this.catalog.resolveContext(projectNode);
+      const origin = await this.confirmRepositoryOrigin(projectNode);
+      if (origin === undefined) return;
       const selection = await this.chooseMaterialization(node);
       if (selection === undefined) return;
       const targetBranch = await this.chooseEditableBranch(context);
@@ -503,6 +509,7 @@ export class CommandController {
             ...(selection.revealPath === undefined
               ? {}
               : { revealPath: selection.revealPath }),
+            origin,
             signal: controller.signal,
           });
         },
@@ -610,6 +617,37 @@ export class CommandController {
       .then((choice) => {
         if (choice === "Show Output") this.logger.show();
       });
+  }
+
+  private async confirmRepositoryOrigin(
+    node: ProjectNode,
+  ): Promise<RepositoryOriginBinding | undefined> {
+    const instanceBaseUrl = node.instance.baseUrl;
+    const comparison = compareRepositoryOrigin(
+      node.project.httpUrlToRepo,
+      instanceBaseUrl,
+    );
+    if (comparison.kind === "match") return { instanceBaseUrl };
+
+    const action = `Clone from ${comparison.repositoryHost}`;
+    const confirmed = await vscode.window.showWarningMessage(
+      "GitLab reported a clone URL outside this instance.",
+      {
+        modal: true,
+        detail: [
+          `Instance: ${node.instance.label} (${instanceBaseUrl})`,
+          `Clone URL: ${node.project.httpUrlToRepo}`,
+          "",
+          `Git will authenticate to ${comparison.repositoryHost} with whatever credentials its credential helper holds for that host. Continue only if you expect this GitLab instance to serve Git from that address.`,
+        ].join("\n"),
+      },
+      action,
+    );
+    if (confirmed !== action) return undefined;
+    this.logger.info(
+      `Confirmed clone URL host ${comparison.repositoryHost} for instance ${node.instance.label} (${node.instance.instanceId})`,
+    );
+    return { instanceBaseUrl, confirmedCrossHost: comparison.repositoryHost };
   }
 
   private async chooseMaterialization(

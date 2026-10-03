@@ -33,6 +33,11 @@ currently `reposhelf.instances` and `reposhelf.cloneRoot`, must be readable only
 from user or remote-machine settings, never from an opened workspace. Changing
 their scope or how they are read needs the same review.
 
+Native Git clones are bound to the configured instance: a clone URL outside the
+instance's host and base path needs explicit user confirmation, and the
+materialization service enforces this independently of the UI. Changes to how
+clone, fetch, or push targets are chosen need the same review.
+
 The release pipeline is also a security boundary because it holds the
 Marketplace publishing identity. Changes to the publishing stage, the isolated
 publishing tool in `tools/publish`, pipeline credentials, or GitHub Actions pins

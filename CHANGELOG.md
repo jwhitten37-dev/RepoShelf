@@ -23,6 +23,10 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and RepoShelf shows a one-time notice when a workspace tries to set them.
   Adding or removing an instance no longer copies workspace-provided instances
   into user settings.
+- New local checkouts are cloned only from the configured GitLab instance's own
+  host and base path. If GitLab reports a clone URL elsewhere, RepoShelf asks for
+  explicit confirmation that names the other host before Git contacts it.
+  Reopening a retained workspace never clones a replacement checkout.
 - RepoShelf now explicitly declares that it requires a trusted workspace.
 - Hardened the Marketplace publishing pipeline. Publication installs only a
   pinned, isolated publishing tool with lifecycle scripts disabled, pipeline
