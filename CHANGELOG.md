@@ -36,7 +36,8 @@ it.
   user or remote-machine settings. Values in a workspace's settings are ignored,
   and RepoShelf shows a one-time notice when a workspace tries to set them.
   Adding or removing an instance no longer copies workspace-provided instances
-  into user settings.
+  into user settings. See advisory
+  [GHSA-388m-xcvg-2fj9](https://github.com/jwhitten37-dev/RepoShelf/security/advisories/GHSA-388m-xcvg-2fj9).
 - New local checkouts are cloned only from the configured GitLab instance's own
   host and base path. If GitLab reports a clone URL elsewhere, RepoShelf asks for
   explicit confirmation that names the other host before Git contacts it.
