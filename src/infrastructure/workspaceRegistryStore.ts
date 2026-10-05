@@ -7,6 +7,7 @@ import {
   readdir,
   readFile,
   rename,
+  rm,
   rmdir,
   unlink,
   writeFile,
@@ -14,6 +15,7 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import type { ManagedWorkspaceRecord } from "../domain/models.js";
+import { placeWorkspace } from "./materialization.js";
 
 const REGISTRY_DIRECTORY = "workspace-registry-v1";
 const MAX_REGISTRY_RECORDS = 1_024;
@@ -23,6 +25,14 @@ const UUID_PATTERN =
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
+const STAGING_PATTERN =
+  /^(?:create|remove)-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const STALE_STAGING_MS = 10 * 60 * 1_000;
+
+export type DirectoryRenamer = (
+  source: string,
+  destination: string,
+) => Promise<void>;
 
 export interface WorkspaceRegistryMirror {
   replace(records: readonly ManagedWorkspaceRecord[]): Promise<void>;
@@ -59,6 +69,7 @@ export class WorkspaceRegistryStore {
   public constructor(
     globalStoragePath: string,
     private readonly mirror?: WorkspaceRegistryMirror,
+    private readonly renameDirectory: DirectoryRenamer = rename,
   ) {
     if (!path.isAbsolute(globalStoragePath)) {
       throw registryError(
@@ -73,6 +84,7 @@ export class WorkspaceRegistryStore {
     legacyRecords: readonly ManagedWorkspaceRecord[],
   ): Promise<void> {
     await createSecureDirectory(this.root);
+    await this.removeStaleStaging();
     const initialized = path.join(this.root, "initialized.json");
     if (await exists(initialized)) {
       await assertInitializedSentinel(initialized);
@@ -111,13 +123,22 @@ export class WorkspaceRegistryStore {
           "Registry storage contains an unexpected workspace entry.",
         );
       }
-      const record = await readSnapshot(
-        path.join(workspaces, entry.name, "record.json"),
-      );
-      const artifacts = await readBoundedDirectory(
-        path.join(workspaces, entry.name),
-        16,
-      );
+      const workspaceDirectory = path.join(workspaces, entry.name);
+      let record: ManagedWorkspaceRecord;
+      let artifacts: Awaited<ReturnType<typeof readBoundedDirectory>>;
+      try {
+        record = await readSnapshot(
+          path.join(workspaceDirectory, "record.json"),
+        );
+        artifacts = await readBoundedDirectory(workspaceDirectory, 16);
+      } catch (error) {
+        // Records are published and removed by renaming their whole
+        // directory, so a directory that vanished mid-scan was removed
+        // concurrently. A directory that still exists without a valid record
+        // remains a fail-closed storage error.
+        if (await isMissing(workspaceDirectory)) continue;
+        throw error;
+      }
       if (
         artifacts.some(
           (artifact) =>
@@ -205,16 +226,14 @@ export class WorkspaceRegistryStore {
             "Registry removal requires fresh verified filesystem absence.",
           );
         }
-        await unlink(this.snapshotPath(current.workspaceId)).catch(
-          (error: unknown) => {
-            throw unsafeStorage(error);
-          },
+        // Move the record out of `workspaces/` in one step so concurrent
+        // readers never see a workspace directory without its record.
+        const removed = await this.stagingPath("remove");
+        await this.publishDirectory(
+          path.dirname(this.snapshotPath(current.workspaceId)),
+          removed,
         );
-        await rmdir(path.dirname(this.snapshotPath(current.workspaceId))).catch(
-          (error: unknown) => {
-            throw unsafeStorage(error);
-          },
-        );
+        await removeStagingDirectory(removed);
       });
     });
     await this.refreshMirror(true);
@@ -245,9 +264,90 @@ export class WorkspaceRegistryStore {
   }
 
   private async writeSnapshot(record: ManagedWorkspaceRecord): Promise<void> {
-    const directory = path.dirname(this.snapshotPath(record.workspaceId));
-    await createSecureDirectory(directory);
-    await writeReplaceable(this.snapshotPath(record.workspaceId), record);
+    const snapshot = this.snapshotPath(record.workspaceId);
+    const directory = path.dirname(snapshot);
+    if (await exists(directory)) {
+      await assertSecureDirectory(directory);
+      await writeReplaceable(snapshot, record);
+      return;
+    }
+    // A new record is completed in staging and then renamed into
+    // `workspaces/` as a whole directory, so `workspaces/<id>` never exists
+    // without its record.
+    const staged = await this.stagingPath("create");
+    await createSecureDirectory(staged);
+    try {
+      await writeReplaceable(path.join(staged, "record.json"), record);
+      await createSecureDirectory(path.join(this.root, "workspaces"));
+      await this.publishDirectory(staged, directory);
+    } finally {
+      await removeStagingDirectory(staged);
+    }
+  }
+
+  // Returns a fresh, not-yet-existing path under the secure staging root.
+  private async stagingPath(purpose: "create" | "remove"): Promise<string> {
+    const staging = path.join(this.root, "staging");
+    await createSecureDirectory(staging);
+    return path.join(staging, `${purpose}-${randomUUID()}`);
+  }
+
+  private async publishDirectory(
+    source: string,
+    destination: string,
+  ): Promise<void> {
+    try {
+      await placeWorkspace(
+        source,
+        destination,
+        undefined,
+        this.renameDirectory,
+      );
+    } catch (error) {
+      if (hasCode(error, "EEXIST") || hasCode(error, "ENOTEMPTY")) {
+        throw registryError(
+          "registryConflict",
+          "A workspace registry directory appeared concurrently.",
+          error,
+        );
+      }
+      throw unsafeStorage(error);
+    }
+  }
+
+  // Staging directories are never read as registry state. Only abandoned ones
+  // (older than the bound, holding nothing but record files) are removed.
+  private async removeStaleStaging(): Promise<void> {
+    const staging = path.join(this.root, "staging");
+    if (!(await exists(staging))) return;
+    await assertSecureDirectory(staging);
+    const now = Date.now();
+    for (const entry of await readBoundedDirectory(
+      staging,
+      MAX_REGISTRY_RECORDS,
+    )) {
+      if (!entry.isDirectory() || !STAGING_PATTERN.test(entry.name)) continue;
+      const candidate = path.join(staging, entry.name);
+      try {
+        const stat = await lstat(candidate);
+        if (stat.isSymbolicLink() || now - stat.mtimeMs < STALE_STAGING_MS) {
+          continue;
+        }
+        const contents = await readBoundedDirectory(candidate, 16);
+        if (
+          contents.every(
+            (item) =>
+              item.isFile() &&
+              (item.name === "record.json" ||
+                /^\.record\.[0-9a-f-]+\.tmp$/u.test(item.name)),
+          )
+        ) {
+          await removeStagingDirectory(candidate);
+        }
+      } catch {
+        // Cleanup is best-effort; leftover staging never affects reads.
+      }
+    }
   }
 
   private snapshotPath(workspaceId: string): string {
@@ -722,5 +822,20 @@ async function assertInitializedSentinel(file: string): Promise<void> {
       "Workspace registry initialization record is invalid.",
       error,
     );
+  }
+}
+
+async function removeStagingDirectory(directory: string): Promise<void> {
+  // The staging root never holds links (checked on creation), and the
+  // directory only contains record files.
+  await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+}
+
+async function isMissing(candidate: string): Promise<boolean> {
+  try {
+    await lstat(candidate);
+    return false;
+  } catch (error) {
+    return hasCode(error, "ENOENT");
   }
 }

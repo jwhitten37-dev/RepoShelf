@@ -1,6 +1,15 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ManagedWorkspaceRecord } from "../src/domain/models.js";
@@ -278,6 +287,156 @@ describe("WorkspaceRegistryStore", () => {
     ).rejects.toMatchObject({ code: "invalidRecord" });
   });
 });
+
+describe("WorkspaceRegistryStore concurrent publication", () => {
+  it("never exposes a new workspace directory before its record is complete", async () => {
+    const gate = deferred();
+    const { root } = await createStore();
+    const store = new WorkspaceRegistryStore(
+      root,
+      undefined,
+      async (from, to) => {
+        if (path.basename(path.dirname(to)) === "workspaces")
+          await gate.promise;
+        await rename(from, to);
+      },
+    );
+    await store.initializeFromLegacy([]);
+    const record = makeRecord(1);
+
+    const saving = store.save(record);
+    await waitFor(async () => (await stagingEntries(store)).length === 1);
+    // While the new record is staged, readers see a consistent registry.
+    await expect(store.list()).resolves.toEqual([]);
+    await expect(
+      readdir(path.join(store.root, "workspaces")).catch(() => []),
+    ).resolves.toEqual([]);
+
+    gate.resolve();
+    await saving;
+    await expect(store.list()).resolves.toEqual([record]);
+    await expect(stagingEntries(store)).resolves.toEqual([]);
+  });
+
+  it("removes a record directory atomically while readers keep a consistent view", async () => {
+    const gate = deferred();
+    const { root } = await createStore();
+    const store = new WorkspaceRegistryStore(
+      root,
+      undefined,
+      async (from, to) => {
+        if (path.basename(path.dirname(from)) === "workspaces")
+          await gate.promise;
+        await rename(from, to);
+      },
+    );
+    await store.initializeFromLegacy([]);
+    const record = makeRecord(1);
+    await store.save(record);
+
+    const removing = store.removeVerified(record, () => Promise.resolve(true));
+    await expect(store.list()).resolves.toEqual([record]);
+    gate.resolve();
+    await removing;
+    await expect(store.list()).resolves.toEqual([]);
+    await expect(stagingEntries(store)).resolves.toEqual([]);
+  });
+
+  it("still fails closed for a workspace directory that exists without a record", async () => {
+    const { store } = await createStore();
+    await store.initializeFromLegacy([]);
+    await mkdir(path.join(store.root, "workspaces", uuid(9)), {
+      recursive: true,
+    });
+    await expect(store.list()).rejects.toMatchObject({ code: "unsafeStorage" });
+  });
+
+  it("survives concurrent saves, lists, and removals of distinct workspaces", async () => {
+    const { store } = await createStore();
+    await store.initializeFromLegacy([]);
+    const records = Array.from({ length: 12 }, (_, index) =>
+      makeRecord(index + 1),
+    );
+    let reading = true;
+    const read = async (): Promise<number> => {
+      let reads = 0;
+      while (reading) {
+        await store.list();
+        reads += 1;
+      }
+      return reads;
+    };
+    const readers = [read(), read()];
+
+    try {
+      for (let round = 0; round < 5; round += 1) {
+        await Promise.all(records.map((record) => store.save(record)));
+        await Promise.all(
+          records.map((record) =>
+            store.removeVerified(record, () => Promise.resolve(true)),
+          ),
+        );
+      }
+      await Promise.all(records.slice(6).map((record) => store.save(record)));
+    } finally {
+      reading = false;
+    }
+
+    for (const reads of await Promise.all(readers)) {
+      expect(reads).toBeGreaterThan(0);
+    }
+    await expect(store.list()).resolves.toEqual(records.slice(6));
+  });
+
+  it("removes only abandoned staging directories on load", async () => {
+    const { store } = await createStore();
+    await store.initializeFromLegacy([]);
+    const staging = path.join(store.root, "staging");
+    const stale = path.join(staging, `create-${uuid(21)}`);
+    const fresh = path.join(staging, `create-${uuid(22)}`);
+    const foreign = path.join(staging, `create-${uuid(23)}`);
+    for (const directory of [stale, fresh, foreign]) {
+      await mkdir(directory, { recursive: true });
+      await writeFile(path.join(directory, "record.json"), "{}\n");
+    }
+    await writeFile(path.join(foreign, "unexpected.txt"), "keep\n");
+    const old = new Date(Date.now() - 60 * 60 * 1_000);
+    await utimes(stale, old, old);
+    await utimes(foreign, old, old);
+
+    await store.initializeFromLegacy([]);
+
+    await expect(stagingEntries(store)).resolves.toEqual(
+      [path.basename(foreign), path.basename(fresh)].sort(),
+    );
+  });
+});
+
+async function stagingEntries(
+  store: WorkspaceRegistryStore,
+): Promise<string[]> {
+  try {
+    return (await readdir(path.join(store.root, "staging"))).sort();
+  } catch {
+    return [];
+  }
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function waitFor(condition: () => Promise<boolean>): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (await condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Condition was not reached.");
+}
 
 function directoryLinkType(): "dir" | "junction" {
   return process.platform === "win32" ? "junction" : "dir";

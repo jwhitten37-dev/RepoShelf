@@ -6,6 +6,13 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving or releasing managed workspaces from several VS Code windows at the
+  same time no longer reports that workspace registry storage is unavailable.
+  Registry records are now added and removed in a single atomic step. This
+  resolves the known issue listed for 0.1.1.
+
 ## [0.1.1] - 2026-10-02
 
 Security update. All users should upgrade. No data migration is required.
