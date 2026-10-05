@@ -204,6 +204,16 @@ actions.
 - If fallback leaves an empty host, offer **Close Window** and **Browse Remote**;
   automatic closure is allowed only after successful release and when unrelated
   unsaved or untitled content cannot be lost.
+- In the normal flow, the empty host closes itself as soon as the requesting
+  coordinator holds the claim (`reposhelf.release.closeEmptyWindow`, default
+  `true`). It never closes while it has a folder or a dirty or untitled
+  document. Claims are never transferred, so the empty host has no further
+  role, and the coordinator is known to be running, so closing never quits
+  VS Code. The fallback host does not auto-close: it may be the last window,
+  and closing it would hide the result.
+- The coordinator shows window progress while a release it coordinates is in
+  flight, and reports blocked, failed, and interrupted outcomes, because the
+  requesting window may already be closed.
 
 The 4.1C completion presenter now distinguishes verified local release from
 provider refresh and registry-reconciliation results. Normal coordinator

@@ -469,6 +469,12 @@
           "maximum": 720,
           "scope": "machine-overridable",
           "description": "Hours that Remind Me Later suppresses reminders for the selected workspace."
+        },
+        "reposhelf.release.closeEmptyWindow": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine-overridable",
+          "description": "After you release a managed workspace from its own window, close the empty window that remains once the original RepoShelf window takes over the release. The window is never closed if it has a folder or unsaved or untitled documents open."
         }
       }
     }

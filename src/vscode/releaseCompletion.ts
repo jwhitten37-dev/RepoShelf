@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { Logger } from "../infrastructure/logger.js";
 import {
   projectReleaseCompletion,
+  projectReleaseFailure,
   type ReleaseCompletionAction,
   type ReleaseCompletionResult,
 } from "./releaseCompletionProjection.js";
@@ -44,6 +45,19 @@ export class ReleaseCompletionPresenter {
             ...presentation.actions,
           );
     await this.handle(choice, target);
+  }
+
+  public async presentFailure(
+    outcome: Parameters<typeof projectReleaseFailure>[0],
+    projectLabel: string,
+  ): Promise<void> {
+    const presentation = projectReleaseFailure(outcome, projectLabel);
+    if (presentation === undefined) return;
+    const choice = await vscode.window.showWarningMessage(
+      presentation.message,
+      ...presentation.actions,
+    );
+    if (choice === "Show Output") this.logger.show();
   }
 
   private async handle(
@@ -96,7 +110,7 @@ export class ReleaseCompletionPresenter {
   }
 }
 
-function canCloseWindow(): boolean {
+export function canCloseWindow(): boolean {
   return (
     (vscode.workspace.workspaceFolders?.length ?? 0) === 0 &&
     !vscode.workspace.textDocuments.some(

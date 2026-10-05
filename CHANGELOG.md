@@ -8,6 +8,15 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Releasing a managed workspace from its own window no longer leaves an empty
+  window behind. The empty window closes as soon as the original RepoShelf
+  window takes over the release, unless it has a folder or unsaved or untitled
+  documents open. Set `reposhelf.release.closeEmptyWindow` to `false` to keep
+  it. If the original window isn't running, the empty window completes the
+  release itself as before and offers to close.
+- The original RepoShelf window shows "Releasing <project>…" in the status bar
+  while it completes a release, and reports releases that were blocked or
+  could not finish.
 - **Release Local Workspace** now uses a sign-out icon instead of a trash can.
   Release removes only the local checkout; the remote project and branch are
   kept.

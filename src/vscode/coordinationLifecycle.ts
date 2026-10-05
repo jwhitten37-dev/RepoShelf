@@ -34,7 +34,13 @@ import type {
   ReleaseCatalogRefresher,
   ReleasedCatalogTarget,
 } from "./releaseCompletion.js";
-import { ReleaseCompletionPresenter } from "./releaseCompletion.js";
+import {
+  canCloseWindow,
+  ReleaseCompletionPresenter,
+} from "./releaseCompletion.js";
+import { shouldCloseEmptyHost } from "./releaseCompletionProjection.js";
+
+const ACTIVE_RELEASE_STATES = new Set(["requested", "detached", "claimed"]);
 
 export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   private readonly arbiter: CoordinationClaimArbiter;
@@ -45,6 +51,9 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   private timer: NodeJS.Timeout | undefined;
   private scanning = false;
   private readonly processing = new Set<string>();
+  private acknowledgedOperationId: string | undefined;
+  private closingEmptyHost = false;
+  private readonly releaseProgress = new Map<string, () => void>();
 
   public readonly onDidChangeOperations = this.operationsChanged.event;
 
@@ -130,6 +139,8 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
   public dispose(): void {
     if (this.timer !== undefined) clearInterval(this.timer);
     this.timer = undefined;
+    for (const done of this.releaseProgress.values()) done();
+    this.releaseProgress.clear();
     this.session.stop();
     this.operationsChanged.dispose();
   }
@@ -231,6 +242,7 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       detachedAt: Date.now(),
       consumedIntentId: intent.intentId,
     });
+    this.acknowledgedOperationId = intent.operationId;
     this.operationsChanged.fire();
   }
 
@@ -275,14 +287,14 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
         );
         return;
       }
-      for (const operation of await this.projection.projectAll()) {
+      const operations = await this.projection.projectAll();
+      this.updateReleaseProgress(operations);
+      for (const operation of operations) {
+        if (this.closeEmptyHostIfHandedOff(operation)) return;
         if (operation.state === "claimed") {
           const recovered = await this.executor.recover(operation);
-          if (
-            recovered?.outcome.deletionVerified === true &&
-            operation.request !== undefined
-          ) {
-            await this.presentCompletion(operation.request, recovered.outcome);
+          if (recovered !== undefined && operation.request !== undefined) {
+            await this.presentResult(operation.request, recovered.outcome);
           }
           this.operationsChanged.fire();
           continue;
@@ -347,27 +359,101 @@ export class VsCodeCoordinationLifecycle implements vscode.Disposable {
       this.logger.info(
         `Coordinated release ${request.operationId} finished as ${result.outcome.outcome}; registry=${result.outcome.registryReconciliation}; catalog=${result.outcome.catalogRefresh}`,
       );
-      if (result.outcome.deletionVerified) {
-        void this.presentCompletion(request, result.outcome).catch(
-          (error: unknown) => {
-            this.logger.error("Release completion notification failed", error);
-          },
-        );
-      }
+      void this.presentResult(request, result.outcome).catch(
+        (error: unknown) => {
+          this.logger.error("Release completion notification failed", error);
+        },
+      );
     } finally {
       this.processing.delete(request.operationId);
       this.operationsChanged.fire();
     }
   }
 
-  private async presentCompletion(
+  private async presentResult(
     request: ReleaseRequest,
     outcome: ReleaseOutcome,
   ): Promise<void> {
+    if (!outcome.deletionVerified) {
+      await this.completionPresenter?.presentFailure(
+        outcome,
+        this.projectLabel(request.workspaceId),
+      );
+      return;
+    }
     await this.completionPresenter?.present(
       releaseTarget(request),
       outcome,
       this.session.descriptor.role === "detached",
+    );
+  }
+
+  // The empty window left by Close Folder has no further role once the
+  // coordinator window holds the claim, so it closes instead of lingering.
+  private closeEmptyHostIfHandedOff(operation: ProjectedOperation): boolean {
+    if (
+      this.closingEmptyHost ||
+      !shouldCloseEmptyHost({
+        role: this.session.descriptor.role,
+        acknowledgedOperationId: this.acknowledgedOperationId,
+        operation,
+        canCloseWindow: canCloseWindow(),
+        closeEnabled: vscode.workspace
+          .getConfiguration("reposhelf")
+          .get<boolean>("release.closeEmptyWindow", true),
+      })
+    ) {
+      return false;
+    }
+    this.closingEmptyHost = true;
+    this.logger.info(
+      `Release ${operation.operationId} was claimed by the coordinator window; closing this empty window`,
+    );
+    void vscode.commands.executeCommand("workbench.action.closeWindow");
+    return true;
+  }
+
+  // Shows "Releasing <project>…" in the coordinator window while a release it
+  // coordinates is in flight.
+  private updateReleaseProgress(
+    operations: readonly ProjectedOperation[],
+  ): void {
+    if (this.session.descriptor.role !== "coordinator") return;
+    const active = new Set<string>();
+    for (const operation of operations) {
+      if (
+        !ACTIVE_RELEASE_STATES.has(operation.state) ||
+        operation.request?.coordinatorSessionId !==
+          this.session.descriptor.sessionId
+      ) {
+        continue;
+      }
+      active.add(operation.operationId);
+      if (this.releaseProgress.has(operation.operationId)) continue;
+      let finish: () => void = () => undefined;
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      this.releaseProgress.set(operation.operationId, finish);
+      void vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Window,
+          title: `Releasing ${this.projectLabel(operation.workspaceId)}…`,
+        },
+        () => finished,
+      );
+    }
+    for (const [operationId, finish] of this.releaseProgress) {
+      if (active.has(operationId)) continue;
+      finish();
+      this.releaseProgress.delete(operationId);
+    }
+  }
+
+  private projectLabel(workspaceId: string): string {
+    return (
+      this.registry.list().find((record) => record.workspaceId === workspaceId)
+        ?.projectPath ?? "managed workspace"
     );
   }
 }
