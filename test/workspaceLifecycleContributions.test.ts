@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 interface CommandContribution {
   readonly command: string;
+  readonly icon?: string;
 }
 
 interface MenuContribution {
@@ -57,6 +58,10 @@ const httpSource = readFileSync(
 );
 const gitRunnerSource = readFileSync(
   path.join(root, "src", "infrastructure", "gitRunner.ts"),
+  "utf8",
+);
+const workspaceLifecycleSource = readFileSync(
+  path.join(root, "src", "vscode", "workspaceLifecycle.ts"),
   "utf8",
 );
 
@@ -114,6 +119,24 @@ describe("Phase 4.1C lifecycle contributions", () => {
         )
         .every(({ when }) => when === "reposhelf.isManagedWorkspace == true"),
     ).toBe(true);
+  });
+
+  it("uses a non-destructive-looking icon for local release", () => {
+    // Release removes only the local checkout; a trash can reads as deleting
+    // the repository.
+    const releaseIcons = manifest.contributes.commands
+      .filter(({ command }) =>
+        [
+          "reposhelf.releaseWorkspace",
+          "reposhelf.releaseManagedWorkspace",
+        ].includes(command),
+      )
+      .map(({ icon }) => icon);
+    expect(releaseIcons).toEqual(["$(sign-out)", "$(sign-out)"]);
+    expect(workspaceLifecycleSource).toContain(
+      '"$(sign-out) Release Local Workspace"',
+    );
+    expect(workspaceLifecycleSource).not.toContain("$(trash)");
   });
 
   it("scopes dashboard lifecycle actions to managed-workspace items", () => {

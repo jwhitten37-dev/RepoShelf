@@ -116,7 +116,7 @@
         "command": "reposhelf.releaseWorkspace",
         "title": "Release Local Workspace",
         "category": "RepoShelf",
-        "icon": "$(trash)"
+        "icon": "$(sign-out)"
       },
       {
         "command": "reposhelf.pushAndReleaseWorkspace",
@@ -176,7 +176,7 @@
         "command": "reposhelf.releaseManagedWorkspace",
         "title": "Release Local Workspace",
         "category": "RepoShelf",
-        "icon": "$(trash)"
+        "icon": "$(sign-out)"
       }
     ],
     "viewsContainers": {

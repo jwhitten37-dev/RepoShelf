@@ -6,6 +6,12 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Release Local Workspace** now uses a sign-out icon instead of a trash can.
+  Release removes only the local checkout; the remote project and branch are
+  kept.
+
 ### Fixed
 
 - Saving or releasing managed workspaces from several VS Code windows at the

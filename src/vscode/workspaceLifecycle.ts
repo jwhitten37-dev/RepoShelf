@@ -314,7 +314,7 @@ export class WorkspaceLifecycleController implements vscode.Disposable {
           command: "reposhelf.pushAndReleaseWorkspace",
         },
         {
-          label: "$(trash) Release Local Workspace",
+          label: "$(sign-out) Release Local Workspace",
           detail:
             "Runs the normal fresh safety checks and explicit confirmation",
           command: "reposhelf.releaseWorkspace",
