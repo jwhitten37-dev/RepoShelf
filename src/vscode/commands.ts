@@ -247,7 +247,7 @@ export class CommandController {
         if (selected?.itemType !== "project" || currentNodes.length === 0)
           return;
         const search = picker.value.trim();
-        this.catalog.showProjectSearch(search, currentNodes);
+        this.catalog.showProjectSearchSelection(search, selected.node);
         picker.hide();
         void vscode.commands.executeCommand("reposhelf.catalog.focus");
       }),

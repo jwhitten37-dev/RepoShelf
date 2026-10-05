@@ -12,6 +12,9 @@ will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   same time no longer reports that workspace registry storage is unavailable.
   Registry records are now added and removed in a single atomic step. This
   resolves the known issue listed for 0.1.1.
+- Choosing a project from **Search Projects** now shows only that project in the
+  Remote Catalog instead of every search match. **Clear Project Search** returns
+  to the full catalog.
 
 ## [0.1.1] - 2026-10-02
 

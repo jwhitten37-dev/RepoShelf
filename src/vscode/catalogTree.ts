@@ -16,6 +16,10 @@ import type { ClientFactory } from "./clientFactory.js";
 import type { InstanceService } from "./instanceService.js";
 import type { RefStore } from "./refStore.js";
 import type { ReleasedCatalogTarget } from "./releaseCompletion.js";
+import {
+  projectSearchSelectionNodes,
+  type ProjectSearchSelection,
+} from "./projectSearchSelection.js";
 
 export type ProjectNode = {
   readonly type: "project";
@@ -60,12 +64,7 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
   private readonly clients = new Map<string, Promise<CatalogClient>>();
   private readonly users = new Map<string, Promise<GitLabUser>>();
   private readonly contexts = new Map<string, Promise<ProjectRefContext>>();
-  private projectSearch:
-    | {
-        readonly search: string;
-        readonly nodes: readonly ProjectNode[];
-      }
-    | undefined;
+  private projectSearch: ProjectSearchSelection | undefined;
 
   public readonly onDidChangeTreeData = this.changed.event;
 
@@ -139,11 +138,8 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
     ).map((project) => ({ type: "project" as const, instance, project }));
   }
 
-  public showProjectSearch(
-    search: string,
-    nodes: readonly ProjectNode[],
-  ): void {
-    this.projectSearch = { search, nodes };
+  public showProjectSearchSelection(search: string, node: ProjectNode): void {
+    this.projectSearch = { search, node };
     this.setProjectSearchContext(true);
     this.changed.fire();
   }
@@ -308,14 +304,7 @@ export class CatalogTreeProvider implements vscode.TreeDataProvider<CatalogNode>
     try {
       if (node === undefined) {
         if (this.projectSearch !== undefined) {
-          return [
-            {
-              type: "message",
-              label: `Project search: ${this.projectSearch.search}`,
-              description: `${this.projectSearch.nodes.length} result${this.projectSearch.nodes.length === 1 ? "" : "s"}`,
-            },
-            ...this.projectSearch.nodes,
-          ];
+          return projectSearchSelectionNodes(this.projectSearch);
         }
         return this.instances
           .getEnabledInstances()
